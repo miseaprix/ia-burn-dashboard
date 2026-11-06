@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,readFileSync,writeFileSync,rmSync,statSync} from 'node:fs';
+import {mkdtempSync,readFileSync,writeFileSync,rmSync,statSync,mkdirSync,symlinkSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {execFileSync,spawn} from 'node:child_process';
 import http from 'node:http';
 import {fileURLToPath} from 'node:url';
-import {installClaudeMonitor,removeClaudeHooks} from '../../scripts/install-claude-monitor.mjs';
+import {installClaudeMonitor,removeClaudeHooks,stableNodePath} from '../../scripts/install-claude-monitor.mjs';
 import {monitorContext} from '../../scripts/monitor-context.mjs';
 import {StateStore} from '../src/storage/state-store.js';
 import {ingestMonitor} from '../src/services/monitor-ingest.js';
@@ -78,4 +78,15 @@ test('native Claude hook writes sanitized events to SQLite, isolates datasets an
     await new Promise(r=>server.close(r));
     assert.deepEqual(await invoke('personal',body),{code:0,output:''});
   } finally {if(server.listening)await new Promise(r=>server.close(r));store.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test('installer writes a stable node link instead of a versioned binary path',()=>{
+  const dir=mkdtempSync(path.join(os.tmpdir(),'burn-node-'));
+  try {
+    const versioned=path.join(dir,'Cellar','node','1.0.0','bin','node'),bin=path.join(dir,'bin');
+    mkdirSync(path.dirname(versioned),{recursive:true});mkdirSync(bin);
+    writeFileSync(versioned,'');symlinkSync(versioned,path.join(bin,'node'));
+    assert.equal(stableNodePath(versioned,['/nonexistent',bin].join(path.delimiter)),path.join(bin,'node'));
+    assert.equal(stableNodePath(versioned,'/nonexistent'),versioned);
+  } finally {rmSync(dir,{recursive:true,force:true});}
 });

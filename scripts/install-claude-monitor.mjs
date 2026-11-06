@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import {parseArgs} from 'node:util';
-import {readFileSync,writeFileSync,renameSync,existsSync,mkdirSync,copyFileSync,constants,statSync,chmodSync,lstatSync,unlinkSync} from 'node:fs';
+import {readFileSync,writeFileSync,renameSync,existsSync,mkdirSync,copyFileSync,constants,statSync,chmodSync,lstatSync,unlinkSync,realpathSync} from 'node:fs';
 import {homedir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -9,6 +9,18 @@ import {randomUUID} from 'node:crypto';
 const eventTypes={claude:['SessionStart','SessionEnd','PreToolUse','PostToolUse','PostToolUseFailure','Stop','Notification','UserPromptSubmit','SubagentStart','SubagentStop'],
   codex:['SessionStart','SessionEnd','PreToolUse','PostToolUse','Stop','UserPromptSubmit','SubagentStart','SubagentStop','Interrupt','PreCompact','PostCompact']};
 const quote=v=>"'"+v.replaceAll("'","'\\''")+"'";
+// Package managers (Homebrew, nvm…) put node in a versioned directory that the next
+// upgrade deletes: prefer a PATH link that resolves to the same binary.
+export function stableNodePath(execPath=process.execPath,pathEnv=process.env.PATH || '') {
+  let real;
+  try {real=realpathSync(execPath);} catch {return execPath;}
+  for(const dir of pathEnv.split(path.delimiter)) {
+    if(!dir)continue;
+    const candidate=path.join(dir,path.basename(execPath));
+    try {if(candidate!==real && realpathSync(candidate)===real)return candidate;} catch {}
+  }
+  return execPath;
+}
 export function addClaudeHooks(settings,command,harness='claude') {
   if(!settings || typeof settings!=='object' || Array.isArray(settings))throw new Error('Invalid settings');
   const result=structuredClone(settings);
@@ -48,7 +60,7 @@ export function installClaudeMonitor({dataset,settingsFile,url='http://localhost
   const target=path.resolve(settingsFile || path.join(homedir(),dataset==='personal' ? `.${harness}` : `.${harness}-enterprise`,harness==='claude' ? 'settings.json' : 'hooks.json'));
   if(existsSync(target) && lstatSync(target).isSymbolicLink())throw new Error('Use the actual settings file instead of a symbolic link');
   const script=fileURLToPath(new URL(`./${harness}-monitor-hook.mjs`,import.meta.url));
-  const command=[process.execPath,script,'--dataset',dataset,'--url',endpoint.href].map(quote).join(' ');
+  const command=[stableNodePath(),script,'--dataset',dataset,'--url',endpoint.href].map(quote).join(' ');
   const present=existsSync(target),original=present ? readFileSync(target,'utf8') : '{}';
   const settings=JSON.parse(original);
   const result=remove ? removeClaudeHooks(settings,dataset,harness) : addClaudeHooks(replace ? removeClaudeHooks(settings,dataset,harness) : settings,command,harness);
