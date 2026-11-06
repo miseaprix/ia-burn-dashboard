@@ -1,0 +1,12 @@
+IA Burn
+Copyright (c) 2026 miseaprix
+Licensed under the MIT License (see LICENSE).
+
+This product includes software derived from agent-burn by Melvynx
+(https://github.com/Melvynx/agent-burn),
+licensed under the MIT License.
+
+backend/src/integrations/local.js is a port of the agent-burn Rust sources
+(log parsing and daily aggregation rules for Claude Code and Codex).
+The original agent-burn copyright and MIT permission notice apply to those
+portions.

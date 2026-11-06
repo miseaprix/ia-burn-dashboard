@@ -1,0 +1,17 @@
+{
+  "name": "ia-burn",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "install:all": "npm --prefix backend ci && npm --prefix frontend ci",
+    "test": "npm --prefix backend test",
+    "build": "npm --prefix frontend run build",
+    "check": "npm test && npm run test:demo && npm run build",
+    "start": "npm --prefix backend start",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "test:demo": "node --test frontend/test/*.test.mjs"
+  }
+}

@@ -1,0 +1,5 @@
+import React from 'react';
+import {tiers,capabilities} from '../lib/model-catalog.mjs';
+export default function ModelFilters({value,onChange,label}){
+ return <div className="model-filters"><label>Rechercher<input type="search" aria-label={`Rechercher dans ${label}`} placeholder="Nom du modèle…" value={value.search || ''} onChange={e=>onChange({...value,search:e.target.value})}/></label><label>Gamme<select aria-label={`Gamme dans ${label}`} value={value.tier || ''} onChange={e=>onChange({...value,tier:e.target.value})}><option value="">Toutes les gammes</option>{Object.entries(tiers).map(([id,text])=><option key={id} value={id}>{text}</option>)}</select></label><label>Capacité<select aria-label={`Capacité dans ${label}`} value={value.capability || ''} onChange={e=>onChange({...value,capability:e.target.value})}><option value="">Toutes les capacités</option>{Object.entries(capabilities).map(([id,text])=><option key={id} value={id}>{text}</option>)}</select></label><button type="button" className="activation-secondary" onClick={()=>onChange({})}>Réinitialiser</button></div>;
+}

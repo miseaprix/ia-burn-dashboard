@@ -1,0 +1,21 @@
+# Optional: reuse quotas collected by the native Agent Burn app (macOS).
+# This directory contains usage readings, not Keychain credentials.
+services:
+  ia-burn:
+    environment:
+      CLAUDE_USAGE_CACHE_FILE: /data/agent-burn-cache/claude-usage.json
+      AGENT_BURN_HISTORY_FILE: /data/agent-burn-history/quota-archive.json
+      AGENT_BURN_HISTORY_SOURCE: ${AGENT_BURN_HISTORY_SOURCE:-}
+    volumes:
+      - type: bind
+        source: ${CLAUDE_NATIVE_CACHE_DIR:-${HOME}/Library/Caches/agent-burn}
+        target: /data/agent-burn-cache
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CLAUDE_NATIVE_HISTORY_DIR:-${HOME}/Library/Application Support/Agent Burn}
+        target: /data/agent-burn-history
+        read_only: true
+        bind:
+          create_host_path: false

@@ -1,0 +1,38 @@
+node_modules/
+dist/
+.env
+*.log
+
+backend/state/
+*.oci.tar
+/.idea/
+
+.runtime/
+
+# Local credentials, databases and editor/OS output.
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.db-wal
+*.db-shm
+*.tmp
+*.burn-backup-*
+.DS_Store
+coverage/
+
+# Admin credentials and encryption material live only in the state volume.
+admin-settings.json
+admin-secret.key
+
+# Local working notes: preserved on this machine, excluded from delivery.
+/CHECKPOINT.md
+/DESIGN.md
+/MONITOR-INTEGRATION.md
+/SPEC-BURNDOWN.md
+
+# Static demonstration build (synthetic sources only are versioned).
+frontend/dist-demo/
+public/

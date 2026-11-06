@@ -1,0 +1,11 @@
+# Optional: enables the Claude Code account cache / plan detection.
+# .credentials.json is already read via /data/claude; auth.json via /data/codex.
+services:
+  ia-burn:
+    volumes:
+      - type: bind
+        source: ${CLAUDE_ACCOUNT_PATH:-${HOME}/.claude.json}
+        target: /data/claude-account.json
+        read_only: true
+        bind:
+          create_host_path: false

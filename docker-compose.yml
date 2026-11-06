@@ -1,0 +1,36 @@
+# Fixed project name: the data volume name does not depend on the directory
+# deploy.sh runs from. COMPOSE_PROJECT_NAME overrides the project name;
+# IA_BURN_VOLUME selects the data volume (e.g. reuse an existing one).
+name: ia-burn
+services:
+  ia-burn:
+    build: .
+    image: ia-burn:latest
+    container_name: ia-burn
+    ports:
+      - "${BURN_BIND_HOST:-127.0.0.1}:${BURN_PORT:-4090}:8080"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TZ: ${TZ:-UTC}
+      STATE_DIR: /data/state
+      MONITOR_INGEST_ENABLED: ${MONITOR_INGEST_ENABLED:-0}
+      CLAUDE_ACCOUNT_FILE: /data/claude-account.json
+      ENTERPRISE_ENV_FILE: /data/enterprise.env
+      ENTERPRISE_CLAUDE_DIR: /data/claude-enterprise
+      ENTERPRISE_CODEX_DIR: /data/codex-enterprise
+      ENTERPRISE_OPENCODE_DB: /data/opencode/opencode.db
+    volumes:
+      - "${CLAUDE_DATA_DIR:-${HOME}/.claude}:/data/claude:ro"
+      - "${CODEX_DATA_DIR:-${HOME}/.codex}:/data/codex:ro"
+      - "${ENTERPRISE_CLAUDE_DATA_DIR:-${HOME}/.claude-enterprise}:/data/claude-enterprise:ro"
+      - "${ENTERPRISE_CODEX_DATA_DIR:-${HOME}/.codex-enterprise}:/data/codex-enterprise:ro"
+      - "${ENTERPRISE_OPENCODE_DATA_DIR:-${HOME}/.local/share/opencode}:/data/opencode:ro"
+      - "${ENTERPRISE_ENV_HOST_FILE:-${HOME}/.claude-enterprise.env}:/data/enterprise.env:ro"
+      - burn-state:/data/state
+    stop_grace_period: 30s
+    restart: unless-stopped
+volumes:
+  burn-state:
+    name: ${IA_BURN_VOLUME:-ia-burn_burn-state}

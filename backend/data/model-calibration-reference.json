@@ -1,0 +1,198 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-01-15T12:00:00.000Z",
+  "protocol": "synthetic-arithmetic-v1",
+  "currency": "USD",
+  "rateUnit": "USD per token",
+  "catalogUpdatedAt": "2026-01-15T12:00:00.000Z",
+  "scenario": {
+    "prompt": "Calcule 103 × 107. Vérifie ton calcul en deux étapes courtes.",
+    "measurement": "Cost of one completed synthetic request; effort application and quality not verified"
+  },
+  "description": "FICTITIOUS EXAMPLE — replace with your own gateway export (scripts/export-calibration-reference.mjs). Models and prices are made up.",
+  "models": [
+    {
+      "id": "example-large",
+      "kind": "text",
+      "limitParameter": "max_tokens",
+      "effort": true,
+      "rates": {
+        "input": 0.00001,
+        "output": 0.00005,
+        "cacheRead": 0.000001,
+        "cacheWrite": 0.0000125,
+        "cacheWrite1h": null
+      },
+      "source": "Example catalogue (fictitious sample)",
+      "cells": [
+        {
+          "effort": "default",
+          "status": "observed",
+          "testedAt": "2026-01-15",
+          "maxTokens": 1024,
+          "usage": {
+            "prompt_tokens": 30,
+            "completion_tokens": 200,
+            "total_tokens": 230,
+            "cacheRead": 0,
+            "reasoning": 0
+          },
+          "measuredCost": 0.0103,
+          "predictedCost": 0.0103
+        },
+        {
+          "effort": "low",
+          "status": "observed",
+          "testedAt": "2026-01-15",
+          "maxTokens": 1024,
+          "usage": {
+            "prompt_tokens": 30,
+            "completion_tokens": 100,
+            "total_tokens": 130,
+            "cacheRead": 0,
+            "reasoning": 0
+          },
+          "measuredCost": 0.0053,
+          "predictedCost": 0.0053
+        },
+        {
+          "effort": "medium",
+          "status": "observed",
+          "testedAt": "2026-01-15",
+          "maxTokens": 1024,
+          "usage": {
+            "prompt_tokens": 30,
+            "completion_tokens": 300,
+            "total_tokens": 330,
+            "cacheRead": 0,
+            "reasoning": 0
+          },
+          "measuredCost": 0.0153,
+          "predictedCost": 0.0153
+        },
+        {
+          "effort": "high",
+          "status": "observed",
+          "testedAt": "2026-01-15",
+          "maxTokens": 1024,
+          "usage": {
+            "prompt_tokens": 30,
+            "completion_tokens": 500,
+            "total_tokens": 530,
+            "cacheRead": 0,
+            "reasoning": 0
+          },
+          "measuredCost": 0.0253,
+          "predictedCost": 0.0253
+        }
+      ]
+    },
+    {
+      "id": "example-medium",
+      "kind": "text",
+      "limitParameter": "max_tokens",
+      "effort": true,
+      "rates": {
+        "input": 0.000002,
+        "output": 0.00001,
+        "cacheRead": 2e-7,
+        "cacheWrite": 0.0000025,
+        "cacheWrite1h": null
+      },
+      "source": "Example catalogue (fictitious sample)",
+      "cells": [
+        {
+          "effort": "default",
+          "status": "observed",
+          "testedAt": "2026-01-15",
+          "maxTokens": 1024,
+          "usage": {
+            "prompt_tokens": 30,
+            "completion_tokens": 200,
+            "total_tokens": 230,
+            "cacheRead": 0,
+            "reasoning": 0
+          },
+          "measuredCost": 0.00206,
+          "predictedCost": 0.00206
+        },
+        {
+          "effort": "low",
+          "status": "observed",
+          "testedAt": "2026-01-15",
+          "maxTokens": 1024,
+          "usage": {
+            "prompt_tokens": 30,
+            "completion_tokens": 100,
+            "total_tokens": 130,
+            "cacheRead": 0,
+            "reasoning": 0
+          },
+          "measuredCost": 0.00106,
+          "predictedCost": 0.00106
+        },
+        {
+          "effort": "high",
+          "status": "observed",
+          "testedAt": "2026-01-15",
+          "maxTokens": 1024,
+          "usage": {
+            "prompt_tokens": 30,
+            "completion_tokens": 400,
+            "total_tokens": 430,
+            "cacheRead": 0,
+            "reasoning": 0
+          },
+          "measuredCost": 0.00406,
+          "predictedCost": 0.00406
+        }
+      ]
+    },
+    {
+      "id": "example-small",
+      "kind": "text",
+      "limitParameter": "max_tokens",
+      "effort": false,
+      "rates": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "cacheWrite1h": null
+      },
+      "source": "Example catalogue (fictitious free model)",
+      "cells": [
+        {
+          "effort": "default",
+          "status": "observed",
+          "testedAt": "2026-01-15",
+          "maxTokens": 1024,
+          "usage": {
+            "prompt_tokens": 30,
+            "completion_tokens": 200,
+            "total_tokens": 230,
+            "cacheRead": 0,
+            "reasoning": 0
+          },
+          "measuredCost": 0,
+          "predictedCost": 0
+        }
+      ]
+    },
+    {
+      "id": "example-embedding",
+      "kind": "embedding",
+      "limitParameter": null,
+      "effort": false,
+      "rates": {
+        "input": 1e-7,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "cacheWrite1h": null
+      },
+      "source": "Example catalogue (fictitious sample)",
+      "cells": []
+    }
+  ]
+}
