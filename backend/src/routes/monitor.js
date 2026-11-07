@@ -4,7 +4,8 @@ import { ingestMonitor } from '../services/monitor-ingest.js';
 import { stateStore } from '../storage/state-store.js';
 import { periodRequest } from '../domain/period.js';
 import { rangeToDates } from '../domain/providers.js';
-import { compareTaskRequests, ingestModelRequest, modelRequests } from '../services/model-requests.js';
+import { compareTaskRequests, ingestModelRequest, modelRequests, summarizeModelSession } from '../services/model-requests.js';
+import { codexMonitorTimeline } from '../integrations/codex-monitor-timeline.js';
 
 function addTimeBounds(query, column, terms, args) {
   const {fromTime,toTime}=query;
@@ -134,8 +135,19 @@ export async function monitorRoutes(app) {
     const db=stateStore().db;
     const row=db.prepare('SELECT payload FROM monitor_sessions WHERE source=? AND id=?').get(source,id);
     if (!row) return reply.code(404).send({error:{message:'Session not found'}});
-    const events=db.prepare('SELECT payload FROM monitor_events WHERE source=? AND session_id=? ORDER BY timestamp,id LIMIT ? OFFSET ?').all(source,id,limit,offset).map(r=>JSON.parse(r.payload));
-    const total=db.prepare('SELECT COUNT(*) AS count FROM monitor_events WHERE source=? AND session_id=?').get(source,id).count;
-    return {session:JSON.parse(row.payload),events,totalEvents:total,limit,offset};
+    const session=JSON.parse(row.payload);
+    const summary=summarizeModelSession(db, source, id, session.harness);
+    const hooks=db.prepare(`SELECT COUNT(*) AS total,
+      COUNT(CASE WHEN json_extract(payload,'$.type')='UserPromptSubmit' THEN 1 END) AS prompts
+      FROM monitor_events WHERE source=? AND session_id=?`).get(source,id);
+    const journal=hooks.total ? null : await codexMonitorTimeline(session,offset,limit);
+    if (journal) {
+      session.project ||= journal.project;
+      session.startedAt = journal.startedAt ?? session.startedAt;
+      session.lastEventAt = journal.lastEventAt ?? session.lastEventAt;
+    }
+    const events=journal?.events ?? db.prepare('SELECT payload FROM monitor_events WHERE source=? AND session_id=? ORDER BY timestamp,id LIMIT ? OFFSET ?').all(source,id,limit,offset).map(r=>JSON.parse(r.payload));
+    return {session,summary:{...summary,turns:journal?.turns ?? summary.turns ?? (hooks.prompts || null)},
+      events,totalEvents:journal?.totalEvents ?? hooks.total, timelineSource:journal ? 'codex-log' : hooks.total ? 'hooks' : null,limit,offset};
   });
 }

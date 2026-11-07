@@ -5,6 +5,7 @@ import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
 import { parseArgs } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { normalizeModelRequest } from '../backend/src/domain/model-request.js';
 import { anthropicUsage, claudeContext } from './claude-request-context.mjs';
 import { codexLogContext } from './codex-log-context.mjs';
@@ -14,15 +15,15 @@ function beneath(root, file) {
   const relative = path.relative(root, file);
   return relative !== '' && !path.isAbsolute(relative) && relative !== '..' && !relative.startsWith('..' + path.sep);
 }
-async function fileWithin(root, filename) {
+export async function fileWithin(root, filename, limit = maxBytes) {
   if (typeof filename !== 'string') throw new Error('Missing capture file');
   const file = path.resolve(root, filename);
   if (!beneath(root, file)) throw new Error('File is outside the selected directory');
   const stat = await lstat(file);
-  if (!stat.isFile() || stat.size > maxBytes || !beneath(root, await realpath(file))) throw new Error('Invalid input file');
+  if (!stat.isFile() || stat.size > limit || !beneath(root, await realpath(file))) throw new Error('Invalid input file');
   return file;
 }
-async function* records(file) {
+export async function* records(file) {
   const stream = createReadStream(file);
   try {
     for await (const line of createInterface({ input: stream, crlfDelay: Infinity })) {
@@ -67,7 +68,7 @@ async function* claudeRequests(options) {
   }
 }
 
-async function* codexRequests(options) {
+export async function* codexRequests(options) {
   let session, turn, model, provider;
   const skillsRoot = options['skills-dir'] ? await realpath(options['skills-dir']) : null;
   const context = codexLogContext({ readSkill: skillsRoot ? async file => {
@@ -110,12 +111,13 @@ async function* codexRequests(options) {
   }
 }
 
-function* openCodeRequests(options) {
-  if (!options.session) throw new Error('Use --session for an OpenCode import');
+export function* openCodeRequests(options) {
+  if (!options.session && !options.since) throw new Error('Use --session for an OpenCode import');
   const db = new DatabaseSync(options['opencode-db'], { readOnly: true });
   try {
-    const rows = db.prepare("SELECT id,data FROM session_message WHERE session_id=? AND type='assistant' ORDER BY seq")
-      .iterate(options.session);
+    const rows = options.session
+      ? db.prepare("SELECT id,session_id,data FROM session_message WHERE session_id=? AND type='assistant' ORDER BY seq").iterate(options.session)
+      : db.prepare("SELECT id,session_id,data FROM session_message WHERE type='assistant' AND json_extract(data,'$.time.completed')>=? ORDER BY seq").iterate(options.since);
     for (const row of rows) {
       const message = JSON.parse(row.data);
       if (!message.time?.completed || !message.tokens) continue;
@@ -125,7 +127,7 @@ function* openCodeRequests(options) {
       const inputParts = [input, cache?.read, cache?.write];
       yield {
         harness: 'opencode', captureSource: 'opencode-message', granularity: 'message',
-        sessionId: options.session, id: row.id, timestamp: created.toISOString(),
+        sessionId: row.session_id, id: row.id, timestamp: created.toISOString(),
         provider: message.model?.providerID, model: message.model?.id, durationMs: Number.isSafeInteger(duration) && duration >= 0 ? duration : null,
         usage: {
           input: inputParts.every(Number.isSafeInteger) ? inputParts.reduce((a,b)=>a+b,0) : null,
@@ -176,7 +178,7 @@ async function main() {
   console.log(JSON.stringify({ imported, duplicates, enriched }));
 }
 
-main().catch(error => {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(error => {
   if (/^Receiver returned HTTP \d+$/.test(error.message)) console.error(error.message);
   else console.error('Import failed. Check the source, metadata and local receiver.');
   process.exitCode = 1;

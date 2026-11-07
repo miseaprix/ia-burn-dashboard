@@ -1,7 +1,7 @@
 const harnesses = ['claude', 'codex', 'opencode'];
 const datasets = ['personal', 'enterprise', 'unclassified'];
 const billingModes = ['subscription', 'api', 'local'];
-const captureSources = ['claude-capture', 'codex-log', 'opencode-message', 'provider-report'];
+const captureSources = ['claude-capture', 'codex-log', 'opencode-message', 'opencode-request', 'provider-report'];
 const states = {
   skill: ['name', 'description', 'excerpt', 'full', 'body', 'called'],
   mcp: ['name', 'instructions', 'schema', 'called', 'result', 'failed'],

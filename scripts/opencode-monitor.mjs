@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {prepareMonitorPayload,sendMonitorPayload,monitorEndpoint} from './monitor-client.mjs';
 import {normalizeMonitorEvent} from '../backend/src/domain/monitor-event.js';
+import {registerOpenCodeCapture} from './opencode-request-capture.mjs';
 
 // OpenCode 2.0.25 API. No startup enumeration, transcript or message reads.
 export async function setupOpenCodeMonitor(ctx,{send=sendMonitorPayload}={}) {
@@ -50,6 +51,10 @@ export async function setupOpenCodeMonitor(ctx,{send=sendMonitorPayload}={}) {
   registrations.push(await ctx.tool.hook('execute.before',e=>tool(e,'PreToolUse')));
   registrations.push(await ctx.tool.hook('execute.after',e=>tool(e,e.status==='error' ? 'PostToolUseFailure' : 'PostToolUse')));
   registrations.push(await ctx.session.hook('prompt',e=>schedule({session_id:e.sessionID,type:'UserPromptSubmit',event_id:`prompt:${e.messageID}`})));
+  if (options.captureDirectory) {
+    try { registrations.push(...await registerOpenCodeCapture(ctx, options.captureDirectory, datasetFor, options.machine)); }
+    catch { /* Existing monitoring can continue without request capture. */ }
+  }
 
   // Public stream is live-only, no cursor/replay or old database import.
   const listening=(async()=>{

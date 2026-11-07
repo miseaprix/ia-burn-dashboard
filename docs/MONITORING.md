@@ -1,9 +1,10 @@
-# Collecte Monitoring — premier lot
+# Collecte Monitoring · niveau 3
 
 Le récepteur local alimente **la SQLite de Burn**, dans le volume Docker existant.
 Il ne lit pas la base du monitor historique et ne partage aucune base entre les
-utilisateurs. Les premiers écrans Monitoring sont disponibles ; l’import des
-données anciennes reste reporté à un lot ultérieur.
+utilisateurs. Les événements d’activité et les mesures du modèle ont chacun
+leur récepteur. La collecte continue et l’import manuel alimentent le détail
+des sessions.
 
 ## Pipeline commun
 
@@ -300,6 +301,149 @@ réglages du déploiement et des harnais décrits dans ces guides.
 Le détail d’une session affiche les mesures importées par le récepteur local
 `/api/monitor/model-requests`. La migration SQLite 9 ajoute ces mesures sans
 les additionner aux agrégats de consommation existants.
+
+#### Configuration du niveau 3 par harnais
+
+Activez `MONITOR_INGEST_ENABLED=1` dans `.env`, puis déployez Burn sur le port
+choisi. Les exemples suivants utilisent `./deploy.sh --port 4095` et Node.js 24+
+sur le poste qui exécute les harnais.
+
+| Harnais | Activité | Compteurs du modèle | Détail du contexte |
+| --- | --- | --- | --- |
+| Claude Code | Hooks du profil | `claudeLogs` | Capture native des requêtes et réponses |
+| Paperclip local avec Claude Code/ACP | Selon les hooks disponibles dans l’agent | Journal Claude ou capture | Lanceur `CLAUDE_CODE_EXECUTABLE` et dossier privé |
+| Codex | Hooks approuvés dans le CLI ou journal local en secours | `codexLogs` | Éléments observables dans le journal |
+| OpenCode 2 | Plugin Burn | Messages assistant terminés dans `openCodeDb` | Résumé HTTP ou trame WebSocket sortante via le plugin |
+
+##### Collecteur commun sur le poste
+
+Le processus hôte `node scripts/collect-model-requests.mjs /chemin/collector.json`
+recherche les nouvelles mesures toutes les 15 secondes. Le lancer comme service
+utilisateur (par exemple `launchd` sur macOS). Il reprend les captures Claude en
+attente, puis lit les journaux Claude et Codex ainsi que la base OpenCode. Les
+sources de journaux démarrent à la date `since`. Les captures reçues dans les
+répertoires privés restent en attente jusqu’à leur import. Les fichiers bruts
+indexés sont supprimés après l’accusé de réception local d’IA Burn.
+
+Le fichier de configuration accepte les propriétés suivantes.
+
+| Propriété | Valeur |
+| --- | --- |
+| `receiver` | Récepteur HTTP local, par exemple `http://127.0.0.1:4095/api/monitor/model-requests` |
+| `since` | Date d’activation ISO 8601 |
+| `claudeLogs`, `codexLogs` | Listes d’objets avec `directory` et `dataset`. Pour Claude, `billing` est facultatif. |
+| `claudeCaptures` | Liste d’objets avec `directory`, `dataset`, éventuellement `billing`, et `paperclip: true` pour un répertoire dédié |
+| `paperclip`, `paperclipDatasets` | URL locale de l’API se terminant par `/api/`, puis correspondance facultative entre identifiants de sociétés et datasets |
+| `openCodeDb`, `openCodeProviders` | Chemin vers `opencode.db`, puis correspondance entre identifiants de fournisseurs et datasets |
+| `openCodeCapture` | Répertoire privé partagé avec l’option `captureDirectory` du plugin OpenCode |
+
+Exemple de `~/.local/state/ia-burn/collector.json` sur macOS. Remplacez
+`/Users/alice` par le chemin de votre compte et `since` par votre date de départ.
+Gardez les entrées correspondant aux harnais et profils que vous utilisez.
+
+```json
+{
+  "receiver": "http://127.0.0.1:4095/api/monitor/model-requests",
+  "since": "2026-11-07T20:00:00Z",
+  "claudeLogs": [
+    { "directory": "/Users/alice/.claude", "dataset": "personal" }
+  ],
+  "claudeCaptures": [
+    { "directory": "/Users/alice/.local/state/ia-burn/claude-capture/direct", "dataset": "personal" },
+    { "directory": "/Users/alice/.local/state/ia-burn/claude-capture/paperclip", "dataset": "personal", "paperclip": true }
+  ],
+  "paperclip": "http://127.0.0.1:3100/api/",
+  "codexLogs": [
+    { "directory": "/Users/alice/.codex", "dataset": "personal" }
+  ],
+  "openCodeDb": "/Users/alice/.local/share/opencode/opencode.db",
+  "openCodeProviders": { "openai": "personal", "deepseek": "personal" },
+  "openCodeCapture": "/Users/alice/.local/state/ia-burn/opencode-capture"
+}
+```
+
+Sur macOS, le service utilisateur `launchd` peut lancer ce processus à la
+connexion avec `RunAtLoad` et le relancer avec `KeepAlive`. Utilisez les chemins
+absolus de Node, du script et de la configuration dans `ProgramArguments`.
+Le collecteur se lance depuis le poste hôte, avec accès aux journaux et aux
+dossiers de capture.
+
+##### Claude Code en direct
+
+1. Pour les événements, [installez les hooks Claude Code](#collecteur-natif-claude-code-perso-et-enterprise)
+   dans le profil voulu. Pour les compteurs, ajoutez sa racine
+   `CLAUDE_CONFIG_DIR` à `claudeLogs`.
+2. Pour la capture, créez un dossier de mode `0700`, ajoutez-le à
+   `claudeCaptures` et fusionnez ces clés dans `env` du `settings.json`
+   utilisateur du profil. Utilisez un chemin absolu.
+
+   ```json
+   {
+     "env": {
+       "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+       "OTEL_LOGS_EXPORTER": "console",
+       "OTEL_LOG_RAW_API_BODIES": "file:/Users/alice/.local/state/ia-burn/claude-capture/direct"
+     }
+   }
+   ```
+
+3. Ouvrez une nouvelle session. L’import lit l’index natif, disponible depuis
+   Claude Code 2.1.274. Utilisez un dossier de capture distinct par dataset.
+   [Capture native Claude Code](https://code.claude.com/docs/en/monitoring-usage#api-response-body-event).
+
+##### Paperclip local avec Claude Code via ACP
+
+1. Créez le dossier privé `~/.local/state/ia-burn/claude-capture/paperclip`
+   (mode `0700`).
+2. Dans **Environment variables** de l’adaptateur de l’agent, définissez
+   `CLAUDE_CODE_EXECUTABLE` sur le chemin absolu de
+   `scripts/claude-paperclip-capture.mjs`. Ce lanceur macOS utilise Node et
+   le binaire Claude Code installé sous `~/.local/bin/claude`.
+3. Dans `collector.json`, ajoutez le dossier à `claudeCaptures` avec
+   `paperclip: true`, puis configurez l’URL `paperclip`. Si plusieurs sociétés
+   utilisent des datasets différents, renseignez `paperclipDatasets` avec
+   leur UUID comme clé et `personal` ou `enterprise` comme valeur.
+   Le collecteur rattache l’appel à l’exécution et au ticket via l’identifiant
+   de session Claude et l’horodatage.
+
+##### Codex
+
+- Pour les compteurs et le contexte observable, ajoutez chaque racine
+  `CODEX_HOME` à `codexLogs` avec son dataset. Les journaux `sessions` et
+  `archived_sessions` restent la source. Le corps de la requête au modèle et
+  les schémas d’outils restent indisponibles dans ces journaux.
+- Pour les hooks en direct, [installez et approuvez les hooks Codex](#collecteur-natif-codex)
+  depuis le CLI avec `/hooks`. Quand aucun événement de hook n’a été reçu,
+  le backend peut reconstruire la chronologie à partir du journal si le
+  dossier Codex correspondant est monté en lecture seule.
+
+##### OpenCode 2
+
+1. [Installez le plugin OpenCode](#plugin-opencode-2), puis renseignez
+   `openCodeDb` et `openCodeProviders` dans `collector.json`. Les clés de
+   `openCodeProviders` sont les identifiants de fournisseurs OpenCode.
+2. Pour le contexte, créez un dossier de mode `0700`. Indiquez le même chemin
+   dans `openCodeCapture` et dans l’option `captureDirectory` du plugin
+   `ia-burn.monitor` dans `~/.config/opencode/opencode.json`. Conservez
+   les options `datasets` et `url` installées, puis adaptez `providers`
+   à vos identifiants. Par exemple, pour un compte DeepSeek direct :
+
+   ```json
+   {
+     "captureDirectory": "/Users/alice/.local/state/ia-burn/opencode-capture",
+     "providers": { "personal": ["openai", "deepseek"], "enterprise": [] }
+   }
+   ```
+
+3. Rechargez OpenCode. Le plugin dépose les résumés HTTP et les trames
+   WebSocket sortantes qu’il observe. Une trame peut porter uniquement le
+   contexte ajouté depuis l’appel précédent. Les compteurs des messages
+   assistant et le contexte des requêtes sont affichés séparément.
+
+Lancez une courte session, puis ouvrez **Monitoring → Sessions avec mesures**.
+Vérifiez le harnais, le dataset et la provenance de la mesure dans le détail.
+
+#### Import manuel
 
 L’importeur Node accepte trois formats. Le dataset doit être explicite.
 

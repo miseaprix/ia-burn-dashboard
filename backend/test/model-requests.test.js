@@ -71,7 +71,13 @@ test('imports a request idempotently and compares the same task across harnesses
       harness: 'claude', captureSource: 'claude-capture', provider: 'anthropic', model: 'claude',
       timestamp: '2026-11-07T15:00:00Z', taskId: 'paperclip:test-task', runId: 'run-1',
       usage: { input: 123, output: 9 }, raw: 'DO_NOT_STORE',
-      context: [{ kind: 'skill', state: 'full', name: 'example', bytes: 41, description: 'DO_NOT_STORE' }],
+      context: [
+        { kind: 'skill', state: 'full', name: 'example', bytes: 41, description: 'DO_NOT_STORE' },
+        { kind: 'mcp', state: 'name', name: 'mcp__remote-devices__Claude_Browser__', bytes: 5 },
+        { kind: 'mcp', state: 'schema', name: 'mcp__remote-devices__computer_', bytes: 1 },
+        { kind: 'mcp', state: 'called', name: 'mcp__remote-devices__computer_' },
+        { kind: 'mcp', state: 'instructions', name: 'Instructions des serveurs MCP' },
+      ],
     };
     assert.equal((await send(request, { host: 'elsewhere.example' })).statusCode, 403);
     assert.equal((await send(request)).json().duplicate, false);
@@ -85,27 +91,49 @@ test('imports a request idempotently and compares the same task across harnesses
     assert.equal((await send(enriched)).json().enriched, true);
     assert.equal((await send(enriched)).json().duplicate, true);
     assert.equal((await send(codex)).statusCode, 400);
+    const transcript = { ...request, id: 'claude-upgrade', sessionId: 'claude-upgrade', taskId: null,
+      captureSource: 'provider-report', context: null, requestBytes: null };
+    const capture = { ...transcript, captureSource: 'claude-capture', context: request.context,
+      requestBytes: 1024, timestamp: '2026-11-07T15:00:01Z' };
+    assert.equal((await send(transcript)).json().duplicate, false);
+    assert.equal((await send(capture)).json().enriched, true);
+    assert.equal((await send(transcript)).json().duplicate, true);
     const query = new URLSearchParams({ source: JSON.stringify(['claude','personal','test']), id: 'session' });
     const result = await app.inject({ url: `${url}?${query}`, headers });
     assert.equal(result.statusCode, 200);
     assert.equal(result.json().total, 1);
     assert.equal(result.json().requests[0].context[0].estimatedTokens, 11);
+    const beyondPage = (await app.inject({ url: `${url}?${query}&offset=20`, headers })).json();
+    assert.deepEqual(beyondPage.requests, []);
+    assert.deepEqual(beyondPage.contextSummary, {
+      measuredRequests: 1,
+      groups: [
+        { kind: 'mcp', server: null, bytes: null, estimatedTokens: null },
+        { kind: 'mcp', server: 'remote-devices', bytes: 6, estimatedTokens: 3 },
+        { kind: 'skill', server: null, bytes: 41, estimatedTokens: 11 },
+      ],
+    });
     assert.deepEqual(result.json().comparison.rows.map(row => [row.harness, row.input, row.cacheRead]), [
       ['claude', 123, null], ['codex', 80, 3],
     ]);
     assert.ok(!result.body.includes('DO_NOT_STORE'));
-    assert.equal((await app.inject({ url: `/api/monitor/session?${query}`, headers })).json().totalEvents, 0);
+    const session = (await app.inject({ url: `/api/monitor/session?${query}`, headers })).json();
+    assert.equal(session.totalEvents, 0);
+    assert.deepEqual(session.summary.usage, { input: 123, output: 9, cacheRead: null, cacheWrite: null });
+    assert.equal(session.summary.calls, 1);
+    assert.equal(session.summary.turns, null);
+    assert.equal(session.summary.costs.estimated.count, 0);
     const history = await app.inject({ method: 'POST', url: '/api/monitor/events', headers, payload: {
       schema_version: 1, event_id: 'history-start', session_id: 'history', type: 'SessionStart',
       harness: 'claude', dataset: 'personal', machine_id: 'test', timestamp: request.timestamp,
     } });
     assert.equal(history.statusCode, 200);
     const all = await app.inject({ url: '/api/monitor', headers });
-    assert.equal(all.json().summary.sessions, 3);
+    assert.equal(all.json().summary.sessions, 4);
     assert.equal(all.json().sessions.find(session => session.id === 'history').modelRequestCount, 0);
     const measured = await app.inject({ url: '/api/monitor?modelOnly=1', headers });
-    assert.equal(measured.json().summary.sessions, 2);
-    assert.deepEqual(measured.json().sessions.map(session => session.modelRequestCount), [1, 1]);
+    assert.equal(measured.json().summary.sessions, 3);
+    assert.deepEqual(measured.json().sessions.map(session => session.modelRequestCount), [1, 1, 1]);
   } finally {
     await app.close();
     closeStateStores();

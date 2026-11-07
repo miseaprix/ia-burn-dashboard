@@ -1262,6 +1262,24 @@ a {
 .monitor-pagination { justify-content: flex-end; align-items: center; margin-top: 14px; }
 .monitor-pagination a, #monitor-sessions td a { color: #80caff; }
 .monitor-back { text-decoration: none; }
+.monitor-session-page { grid-template-columns: minmax(0, 1fr); }
+.session-overview-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.session-overview-header > div:first-child { min-width: 0; }
+.session-overview-kicker { color: var(--muted); font-size: 12px; }
+.session-overview .session-overview-header h2 { margin: 4px 0 0; font-size: 23px; overflow-wrap: anywhere; }
+.session-overview-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.session-overview-tags span { padding: 4px 9px; border-radius: var(--radius-pill); background: var(--hover); overflow-wrap: anywhere; }
+.session-kpis, .session-token-breakdown { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin: 13px 0 0; }
+.session-kpis > div { min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 10px; }
+.session-kpis dt, .session-token-breakdown dt, .session-kpis small { color: var(--muted); }
+.session-kpis dd, .session-token-breakdown dd { margin: 4px 0 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.session-kpis dd { font-size: clamp(17px, 2vw, 26px); font-weight: 650; }
+.session-kpis small { display: block; margin-top: 3px; line-height: 1.4; }
+.session-token-breakdown > div { padding: 4px 10px 0; }
+.session-overview-details { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 9px; }
+.session-overview-details summary { width: fit-content; cursor: pointer; color: var(--muted); }
+.help-page .session-timeline-source { color: var(--muted); font-size: 12px; }
+@media (max-width: 680px) { .session-kpis, .session-token-breakdown { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .monitor-links { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 4px 0; }
 .monitor-links a, #model-requests a { color: #80caff; }
 .monitor-links [aria-current="page"] { color: var(--ink); font-weight: 600; }
@@ -1271,10 +1289,11 @@ a {
 .monitor-metadata { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 12px; margin: 12px 0 0; }
 .monitor-metadata dt { color: var(--muted); }
 .monitor-metadata dd { margin: 4px 0 0; overflow-wrap: anywhere; }
-.monitor-request { border-top: 1px solid #414141; padding: 12px 0; }
-.monitor-request summary { cursor: pointer; font-weight: 600; }
-.monitor-request .help-table-wrap { margin-top: 12px; }
 .help-page .help-note { padding: 12px 14px; background: #333; border-left: 3px solid #ff9f43; border-radius: 6px; }
+.monitoring-setup { min-width: 0; scroll-margin-top: 65px; }
+.monitoring-setup details { border-top: 1px solid var(--line); padding: 10px 0; }
+.monitoring-setup summary { cursor: pointer; font-weight: 600; }
+.monitoring-setup pre { padding: 10px 12px; overflow-x: auto; border-radius: 8px; background: var(--bg); }
 .help-nav-icon { width: 18px; height: 18px; border: 1px solid #aaa; border-radius: 50%; text-align: center; line-height: 16px; }
 .help-back { border: 1px solid #444; background: #333; color: #eee; border-radius: 8px; padding: 8px 12px; cursor: pointer; }
 @media (max-width: 650px) { .help-page th, .help-page td { padding: 8px; } .help-back { font-size: 11px; } }

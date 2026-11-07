@@ -82,12 +82,10 @@ présente ses bénéfices, un **aperçu illustratif sans métriques réelles**, 
 Pour les niveaux 2 et 3, ces pages guident la configuration du déploiement et des
 harnais : **elles n’installent pas automatiquement les collecteurs**.
 
-Le **niveau 3 est en cours de construction** : le collecteur Claude Code Perso/Enterprise et les premiers écrans
-Monitoring sont disponibles. Les collecteurs natifs Codex et OpenCode 2 sont
-également installables (validation `/hooks` dans le CLI Codex, rechargement pour OpenCode).
-L’import d’un ancien historique est facultatif et distinct de
-la collecte des nouvelles données ; aucune donnée personnelle n’est livrée avec
-l’application.
+Le niveau 3 affiche les événements, les compteurs du modèle et le contexte
+observé. Leur disponibilité dépend du harnais et des sources activées. Le guide
+[Configuration du niveau 3 par harnais](docs/MONITORING.md#configuration-du-niveau-3-par-harnais)
+détaille les réglages de Claude Code, Paperclip via Claude Code/ACP, Codex et OpenCode 2.
 
 Voir les guides [configuration](docs/CONFIGURATION.md),
 [collecte Monitoring](docs/MONITORING.md).
