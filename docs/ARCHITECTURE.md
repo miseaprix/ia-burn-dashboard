@@ -128,10 +128,10 @@ Le récepteur optionnel `routes/monitor.js` normalise les événements via
 événements et snapshots dans une transaction. Ces données sont séparées des
 agrégats de consommation. Voir [le contrat de collecte](MONITORING.md).
 
-### Échanges API (schema 7, compatibilité)
+### Échanges API (schéma 8)
 
 `POST /api/monitor/requests` normalise une liste autorisée de métadonnées et de
 compteurs via `services/proxy-ingest.js`. Les échanges individuels sont dans
-`monitor_requests`, identifiés par machine + requête, séparément des snapshots
+`monitor_requests`, identifiés par dataset + machine + requête, séparément des snapshots
 de session et des agrégats de dépenses. Aucun émetteur n’est fourni par ce dépôt ;
 un renvoi ne crée pas de doublon.

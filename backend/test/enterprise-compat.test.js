@@ -72,8 +72,6 @@ test('startup migration renames persisted legacy ids idempotently', async () => 
     store.db.prepare('INSERT INTO monitor_sessions VALUES(?,?,?,?,?,?,?)').run(src, 's', '2026-01-01T00:00:00Z', null, null, 'm',
       JSON.stringify({id: 's', source: src, dataset: 'accorgpt'}));
     store.db.prepare('INSERT INTO monitor_events VALUES(?,?,?,?,?)').run(src, 'e', 's', '2026-01-01T00:00:00Z', JSON.stringify({dataset: 'accorgpt'}));
-    store.db.prepare('INSERT INTO monitor_requests VALUES(?,?,?,?,?,?,?,?)').run('m', 'r', '2026-01-01T00:00:00Z', null, null, null, null,
-      JSON.stringify({dataset: 'accorgpt'}));
     store.close();
 
     for (let i = 0; i < 2; i++) { store = new StateStore(file); store.close(); }
@@ -86,7 +84,6 @@ test('startup migration renames persisted legacy ids idempotently', async () => 
     assert.equal(session.source, JSON.stringify(['claude', 'enterprise', 'm']));
     assert.deepEqual(JSON.parse(session.payload), {id: 's', source: session.source, dataset: 'enterprise'});
     assert.equal(JSON.parse(db.prepare('SELECT payload FROM monitor_events').get().payload).dataset, 'enterprise');
-    assert.equal(JSON.parse(db.prepare('SELECT payload FROM monitor_requests').get().payload).dataset, 'enterprise');
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM daily_usage WHERE dataset LIKE 'accorgpt%' OR harness='accorgpt'").get().n, 0);
     db.close();
   } finally {

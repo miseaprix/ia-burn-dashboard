@@ -39,6 +39,22 @@ test('demo transport never calls fetch, rejects unknown endpoints, keeps changes
     const controller=new AbortController();controller.abort();await assert.rejects(apiFetch('/api/dashboard',{signal:controller.signal}),{name:'AbortError'});
   } finally {globalThis.fetch=original;delete globalThis.window;}
 });
+test('a listed demo session opens its events with the exact source and ID',async()=>{
+  globalThis.window={location:{search:'?level=3'}};
+  try {
+    const session=monitoring(3).sessions[0];
+    const url=`/api/monitor/session?${new URLSearchParams({source:session.source,id:session.id})}`;
+    const response=await apiFetch(url);
+    assert.equal(response.status,200);
+    const detail=await response.json();
+    assert.equal(detail.session.id,session.id);
+    assert.equal(detail.events.length,session.eventCount);
+    assert.equal(detail.totalEvents,session.eventCount);
+    assert.equal((await apiFetch(url.replace('source=synthetic','source=other'))).status,404);
+    window.location.search='?level=2';
+    assert.equal((await apiFetch(url)).status,404);
+  } finally {delete globalThis.window;}
+});
 test('Pages exposes the dated published reference without network or simulated paid measurements',async()=>{
  globalThis.window={location:{search:'?page=context'}};
  const original=globalThis.fetch;globalThis.fetch=()=>{throw new Error('No network');};

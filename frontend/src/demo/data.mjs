@@ -67,10 +67,40 @@ export function dashboard(query=new URLSearchParams(),{now=new Date(),budget=300
     refresh:{today,includesToday:period.from<=today && period.to>=today,relative:false,intervalMs:60000},collection:{usage:{lastSuccess:now.toISOString()}},
     ...(corporate ? {budget:{monthStart:day(monthStart),limit:budget,spent,remaining:budget-spent,resetsAt:monthEnd.toISOString()},budgetBurndown:computeBudgetBurndown({spent,limit:budget,now,monthStart,monthEnd,dailyCumulative:cumulativeFromDaily(monthly,monthStart,now)})} : {})};
 }
-export function monitoring(level=3) {
-  const sessions=level>=3 ? ['codex','claude','opencode'].map((h,i)=>({id:`demo-${i}`,source:'synthetic',project:['demo-shop','demo-api','demo-docs'][i],ticket:`DEMO-${10+i}`,harness:h,eventCount:40})) : [];
-  return {configured:level>=3,summary:{sessions:sessions.length,events:sessions.length*40},sessions};
+function monitorPage(items, params, timestamp) {
+  const from = params.get('fromTime'), to = params.get('toTime');
+  const filtered = from && to ? items.filter(item => item[timestamp] >= from && item[timestamp] <= to) : items;
+  const offset = Math.max(0, Number(params.get('offset')) || 0), limit = 50;
+  return { rows: filtered.slice(offset, offset + limit), total: filtered.length, offset, limit };
 }
-export function requests(level=3) {
-  return {summary:{requests:level>=3 ? 40 : 0,unknownHarness:0},requests:level>=3 ? modelNames.map((model,i)=>({machine_id:'demo',request_id:`demo-request-${i}`,model,harness:['claude','codex','opencode'][i],status:200,response_headers_ms:200})) : []};
+function monitorTimestamp(minutesAgo) {
+  return new Date(Math.floor(Date.now() / 60000) * 60000 - minutesAgo * 60000).toISOString();
+}
+export function monitoring(level=3, params=new URLSearchParams()) {
+  const sessions = level >= 3 && params.get('modelOnly') !== '1' ? ['codex','claude','opencode'].map((harness,i) => ({
+    id: `demo-${i}`, source:'synthetic', project:['demo-shop','demo-api','demo-docs'][i],
+    ticket:`DEMO-${10+i}`, harness, dataset:i===0 ? 'personal' : 'enterprise',
+    startedAt:monitorTimestamp(5 + i * 10), eventCount:40,
+  })) : [];
+  const { rows, total, offset, limit } = monitorPage(sessions, params, 'startedAt');
+  return { configured:level>=3, summary:{sessions:total,events:total*40}, sessions:rows, offset, limit };
+}
+export function monitoringSession(level, params) {
+  const session = monitoring(level).sessions.find(row => row.id === params.get('id') && row.source === params.get('source'));
+  if (!session) return null;
+  const offset = Number(params.get('offset') ?? 0), limit = Number(params.get('limit') ?? 500);
+  const start = Date.parse(session.startedAt);
+  const types = ['SessionStart', 'UserPromptSubmit', ...Array.from({length:18}, () => ['PreToolUse','PostToolUse']).flat(), 'Stop', 'SessionEnd'];
+  const events = types.map((type, i) => ({ id: `${session.id}-${i}`, type,
+    timestamp: new Date(start + i * 1000).toISOString(), tool: type.includes('ToolUse') ? 'Read' : null }));
+  return { session, events: events.slice(offset, offset + limit), totalEvents: events.length, limit, offset };
+}
+export function requests(level=3, params=new URLSearchParams()) {
+  const exchanges = level >= 3 ? Array.from({ length:40 }, (_, i) => ({
+    dataset:i%3===0 ? 'personal' : 'enterprise', machine_id:'demo', request_id:`demo-request-${i}`,
+    timestamp:monitorTimestamp(i + 1), model:modelNames[i%modelNames.length],
+    harness:['claude','codex','opencode'][i%3], status:200, response_headers_ms:200,
+  })) : [];
+  const { rows, total, offset, limit } = monitorPage(exchanges, params, 'timestamp');
+  return { summary:{requests:total,unknownHarness:0}, requests:rows, offset, limit };
 }

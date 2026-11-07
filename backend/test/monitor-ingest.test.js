@@ -60,9 +60,21 @@ test('local-only receiver is opt-in and persists across recreation, with read-on
     const query=await app.inject({url:'/api/monitor?project=demo&range=all',headers:{host:'localhost'}});
     assert.equal(query.statusCode,200);assert.equal(query.json().summary.sessions,1);
     assert.equal(query.json().summary.missingUsage,1);
+    const sessionRange=(fromTime,toTime)=>app.inject({
+      url:`/api/monitor?${new URLSearchParams({project:'demo',fromTime,toTime})}`,headers:{host:'localhost'},
+    });
+    assert.equal((await sessionRange('2026-01-01T10:00:00Z','2026-01-01T10:00:00Z')).json().summary.sessions,1);
+    assert.equal((await sessionRange('2026-01-01T10:00:01Z','2026-01-01T11:00:00Z')).json().summary.sessions,0);
+    assert.equal((await sessionRange('2026-01-01T11:00:00Z','2026-01-01T10:00:00Z')).statusCode,400);
     const source=encodeURIComponent(JSON.stringify(['claude','personal','demo-machine']));
     const detail=await app.inject({url:`/api/monitor/session?source=${source}&id=same-session`,headers:{host:'localhost'}});
     assert.equal(detail.statusCode,200);assert.equal(detail.json().totalEvents,1);
+    assert.equal((await send('/api/monitor/events',event('claude','personal',{event_id:'last-event',type:'SessionEnd',timestamp:'2026-01-01T10:05:00Z'}))).statusCode,200);
+    const secondPage=await app.inject({url:`/api/monitor/session?source=${source}&id=same-session&offset=1&limit=1`,headers:{host:'localhost'}});
+    assert.equal(secondPage.statusCode,200);
+    assert.deepEqual(secondPage.json().events.map(row=>row.id),['last-event']);
+    assert.equal(secondPage.json().totalEvents,2);
+    assert.equal((await app.inject({url:`/api/monitor/session?source=${source}&id=same-session&offset=-1`,headers:{host:'localhost'}})).statusCode,400);
     assert.equal((await app.inject({url:'/api/monitor?range=custom&from=bad&to=bad',headers:{host:'localhost'}})).statusCode,400);
   } finally {
     await app.close();closeStateStores();

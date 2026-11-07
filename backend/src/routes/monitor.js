@@ -1,9 +1,20 @@
-import { ingestProxy } from '../services/proxy-ingest.js';
+import { ingestProxy, normalizeProxyDataset } from '../services/proxy-ingest.js';
 import { monitorMetrics } from '../services/monitor-metrics.js';
 import { ingestMonitor } from '../services/monitor-ingest.js';
 import { stateStore } from '../storage/state-store.js';
 import { periodRequest } from '../domain/period.js';
 import { rangeToDates } from '../domain/providers.js';
+import { compareTaskRequests, ingestModelRequest, modelRequests } from '../services/model-requests.js';
+
+function addTimeBounds(query, column, terms, args) {
+  const {fromTime,toTime}=query;
+  if (fromTime===undefined && toTime===undefined) return;
+  const valid=value=>typeof value==='string' && /Z$|[+-]\d{2}:\d{2}$/.test(value) && Number.isFinite(Date.parse(value));
+  if (!valid(fromTime) || !valid(toTime) || Date.parse(fromTime)>Date.parse(toTime))
+    throw new Error('Invalid time range');
+  terms.push(`${column}>=?`, `${column}<=?`);
+  args.push(new Date(fromTime).toISOString(), new Date(toTime).toISOString());
+}
 
 export async function monitorRoutes(app) {
   async function localOnly(request,reply) {
@@ -28,11 +39,19 @@ export async function monitorRoutes(app) {
   app.get('/api/monitor/requests',{preHandler:localOnly},async(request,reply)=>{
     const terms=[],args=[];
     let period;
-    try {period=periodRequest({...request.query,range:request.query.range || 'all'});}
+    try {
+      period=periodRequest({...request.query,range:request.query.range || 'all'});
+      addTimeBounds(request.query,'timestamp',terms,args);
+    }
     catch(e) {return reply.code(400).send({error:{message:e.message}});}
     const dates=period.range==='custom' ? {start:period.from,end:period.to} : rangeToDates(period.range);
     if(dates.start) {terms.push('substr(timestamp,1,10)>=?');args.push(dates.start);}
     if(dates.end) {terms.push('substr(timestamp,1,10)<=?');args.push(dates.end);}
+    if (request.query.dataset !== undefined) {
+      const dataset=normalizeProxyDataset(request.query.dataset);
+      if (!dataset) return reply.code(400).send({error:{message:'Invalid dataset'}});
+      terms.push('dataset=?');args.push(dataset);
+    }
     for (const key of ['harness','project','ticket','machine','session_id']) if(request.query[key]) {
       const value=request.query[key];
       if(typeof value!=='string' || value.length>1000) return reply.code(400).send({error:{message:'Invalid filter'}});
@@ -47,18 +66,24 @@ export async function monitorRoutes(app) {
       SUM(CASE WHEN session_id IS NULL THEN 1 ELSE 0 END) AS unknownSession,
       AVG(json_extract(payload,'$.response_headers_ms')) AS avgResponseHeadersMs
       FROM monitor_requests${where}`).get(...args);
-    const requests=db.prepare(`SELECT payload FROM monitor_requests${where} ORDER BY timestamp DESC,machine,id LIMIT 50 OFFSET ?`).all(...args,offset).map(r=>JSON.parse(r.payload));
+    const requests=db.prepare(`SELECT payload FROM monitor_requests${where} ORDER BY timestamp DESC,machine,id,dataset LIMIT 50 OFFSET ?`).all(...args,offset).map(r=>JSON.parse(r.payload));
     return {requests,summary,offset,limit:50,period:dates,basis:'Observed proxy exchanges; separate from session snapshots and gateway spend.'};
   });
   app.get('/api/monitor', {preHandler:localOnly}, async (request, reply) => {
     const q = request.query;
+    const terms=[],args=[];
     let period;
-    try { period=periodRequest({...q,range:q.range || 'all'}); }
+    try {
+      period=periodRequest({...q,range:q.range || 'all'});
+      addTimeBounds(q,'s.started_at',terms,args);
+    }
     catch (e) { return reply.code(400).send({error:{message:e.message}}); }
     const dates=period.range==='custom' ? {start:period.from,end:period.to} : rangeToDates(period.range);
-    const terms=[],args=[];
     if (dates.start) {terms.push('substr(s.started_at,1,10)>=?');args.push(dates.start);}
     if (dates.end) {terms.push('substr(s.started_at,1,10)<=?');args.push(dates.end);}
+    if (q.modelOnly === '1') terms.push(`EXISTS (
+      SELECT 1 FROM monitor_model_requests m WHERE m.source=s.source AND m.session_id=s.id
+    )`);
     for (const key of ['project','ticket','machine','source']) if (q[key]) {
       if (typeof q[key] !== 'string' || q[key].length>1000) return reply.code(400).send({error:{message:'Invalid filter'}});
       terms.push(`s.${key}=?`);args.push(q[key]);
@@ -70,7 +95,11 @@ export async function monitorRoutes(app) {
     const summary=db.prepare(`SELECT COUNT(*) AS sessions,SUM(json_extract(payload,'$.tokens')) AS tokens,
       COUNT(*)-COUNT(json_extract(payload,'$.tokens')) AS missingUsage,SUM(json_extract(payload,'$.eventCount')) AS events
       FROM monitor_sessions s ${where}`).get(...args);
-    const sessions=db.prepare(`SELECT payload FROM monitor_sessions s ${where} ORDER BY started_at DESC,source,id LIMIT 50 OFFSET ?`).all(...args,offset).map(r=>JSON.parse(r.payload));
+    const sessions=db.prepare(`SELECT s.payload, (
+      SELECT COUNT(*) FROM monitor_model_requests m WHERE m.source=s.source AND m.session_id=s.id
+    ) AS modelRequestCount FROM monitor_sessions s ${where}
+    ORDER BY started_at DESC,source,id LIMIT 50 OFFSET ?`).all(...args,offset)
+      .map(row=>({ ...JSON.parse(row.payload), modelRequestCount:row.modelRequestCount }));
     const filters={};
     for (const key of ['project','ticket','machine','source']) filters[key]=db.prepare(`SELECT DISTINCT ${key} AS value FROM monitor_sessions WHERE ${key} IS NOT NULL AND ${key}!='' ORDER BY ${key} LIMIT 200`).all().map(r=>r.value);
     const latest=db.prepare('SELECT MAX(timestamp) AS lastEventAt FROM monitor_events').get();
@@ -78,15 +107,35 @@ export async function monitorRoutes(app) {
     return {sessions,summary,metrics:monitorMetrics(db,where,args),filters,offset,limit:50,period:dates,status,configured:process.env.MONITOR_INGEST_ENABLED==='1',
       basis:'Monitor snapshots; separate from dashboard usage totals. Dates filter session start (UTC).'};
   });
+  app.post('/api/monitor/model-requests', { preHandler: localOnly, bodyLimit: 1024 * 1024 }, async (request, reply) => {
+    if (process.env.MONITOR_INGEST_ENABLED !== '1') return reply.code(503).send({ error: { message: 'Monitor ingestion is disabled.' } });
+    try {
+      return ingestModelRequest(stateStore().db, request.body);
+    } catch {
+      return reply.code(400).send({ error: { message: 'Invalid or conflicting model request.' } });
+    }
+  });
+  app.get('/api/monitor/model-requests', { preHandler: localOnly }, async (request, reply) => {
+    const { source, id } = request.query;
+    const offset = Number(request.query.offset ?? 0);
+    if (typeof source !== 'string' || typeof id !== 'string' || source.length > 1000 || id.length > 1000 ||
+        !Number.isSafeInteger(offset) || offset < 0)
+      return reply.code(400).send({ error: { message: 'Choose a session and valid offset.' } });
+    const db = stateStore().db;
+    return { ...modelRequests(db, source, id, offset, 20), comparison: compareTaskRequests(db, source, id) };
+  });
   app.get('/api/monitor/session', {preHandler:localOnly}, async (request,reply) => {
     const {source,id}=request.query;
     if (typeof source !== 'string' || typeof id !== 'string' || source.length>1000 || id.length>1000)
       return reply.code(400).send({error:{message:'Choose a session'}});
+    const offset=Number(request.query.offset ?? 0),limit=Number(request.query.limit ?? 500);
+    if (!Number.isSafeInteger(offset) || offset<0 || !Number.isSafeInteger(limit) || limit<1 || limit>500)
+      return reply.code(400).send({error:{message:'Invalid event pagination'}});
     const db=stateStore().db;
     const row=db.prepare('SELECT payload FROM monitor_sessions WHERE source=? AND id=?').get(source,id);
     if (!row) return reply.code(404).send({error:{message:'Session not found'}});
-    const events=db.prepare('SELECT payload FROM monitor_events WHERE source=? AND session_id=? ORDER BY timestamp,id LIMIT 500').all(source,id).map(r=>JSON.parse(r.payload));
+    const events=db.prepare('SELECT payload FROM monitor_events WHERE source=? AND session_id=? ORDER BY timestamp,id LIMIT ? OFFSET ?').all(source,id,limit,offset).map(r=>JSON.parse(r.payload));
     const total=db.prepare('SELECT COUNT(*) AS count FROM monitor_events WHERE source=? AND session_id=?').get(source,id).count;
-    return {session:JSON.parse(row.payload),events,totalEvents:total};
+    return {session:JSON.parse(row.payload),events,totalEvents:total,limit,offset};
   });
 }

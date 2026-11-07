@@ -1,8 +1,14 @@
 import { stateStore } from '../storage/state-store.js';
 
+export function normalizeProxyDataset(value) {
+  if (value==='accorgpt') return 'enterprise';
+  return value==='personal' || value==='enterprise' ? value : null;
+}
+
 // API exchanges are individual readings, never session snapshots or billed totals.
 export function ingestProxy(body, {store=stateStore()}={}) {
-  if (!body || body.schema_version!==1 || !['enterprise','accorgpt'].includes(body.dataset)) throw new Error('Invalid exchange');
+  const dataset=normalizeProxyDataset(body?.dataset);
+  if (body?.schema_version!==1 || !dataset) throw new Error('Invalid exchange');
   const text=(v,max=256)=>{
     if (v==null) return null;
     if (typeof v!=='string' || !v || v.length>max || /[\x00-\x1f\x7f]/.test(v)) throw new Error('Invalid metadata');
@@ -21,7 +27,7 @@ export function ingestProxy(body, {store=stateStore()}={}) {
   if (status==null || status<100 || status>599) throw new Error('Invalid status');
   const usage={};
   for (const key of ['input','output','cacheRead','cacheWrite','total']) usage[key]=number(body.usage?.[key]);
-  const event={schema_version:1,dataset:'enterprise',request_id:id,machine_id:machine,timestamp:new Date(at).toISOString(),
+  const event={schema_version:1,dataset,request_id:id,machine_id:machine,timestamp:new Date(at).toISOString(),
     harness,session_id:text(body.session_id),client_request_id:text(body.client_request_id),
     project:text(body.project,1000),ticket:text(body.ticket),tool_use_id:text(body.tool_use_id),parent_tool_use_id:text(body.parent_tool_use_id),
     model:text(body.model),model_requested:text(body.model_requested),status,response_headers_ms:ms,
@@ -29,9 +35,10 @@ export function ingestProxy(body, {store=stateStore()}={}) {
   const payload=JSON.stringify(event),db=store.db;
   db.exec('BEGIN IMMEDIATE');
   try {
-    const old=db.prepare('SELECT payload FROM monitor_requests WHERE machine=? AND id=?').get(machine,id);
+    const old=db.prepare('SELECT payload FROM monitor_requests WHERE dataset=? AND machine=? AND id=?').get(dataset,machine,id);
     if (old && old.payload!==payload) throw new Error('Conflicting exchange');
-    if (!old) db.prepare('INSERT INTO monitor_requests VALUES(?,?,?,?,?,?,?,?)').run(machine,id,event.timestamp,harness,event.session_id,event.project,event.ticket,payload);
+    if (!old) db.prepare(`INSERT INTO monitor_requests(dataset,machine,id,timestamp,harness,session_id,project,ticket,payload)
+      VALUES(?,?,?,?,?,?,?,?,?)`).run(dataset,machine,id,event.timestamp,harness,event.session_id,event.project,event.ticket,payload);
     db.exec('COMMIT');return {accepted:true,duplicate:!!old,requestId:id};
   } catch(e) {db.exec('ROLLBACK');throw e;}
 }

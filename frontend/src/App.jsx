@@ -5,6 +5,8 @@ import {apiFetch} from './lib/api.js';
 import GatewayActivity from './components/GatewayActivity.jsx';
 import ActivationPage from './components/ActivationPage.jsx';
 import MonitoringPage from './components/MonitoringPage.jsx';
+import MonitoringSessionPage from './components/MonitoringSessionPage.jsx';
+import { monitoringListUrl } from './lib/monitoring.js';
 import React, { useEffect, useState } from 'react';
 import useDashboard from './hooks/useDashboard.js';
 import Header from './components/Header.jsx';
@@ -45,12 +47,14 @@ export default function App() {
     [range, setRange] = useState(() => ranges[params.get('range')] ? params.get('range') : (DEMO ? 'mtd' : 'all')),
     [selected, setSelected] = useState(()=>{const page=params.get('page');return page && /^[a-z0-9_-]+$/i.test(page) ? page : 'overview';}),
     [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 650);
+  const monitoring = selected === 'monitoring' || selected === 'monitor-session';
+  const standalonePage = monitoring || ['admin','help','context'].includes(selected);
   // Without a gateway URL, enterprise sources are hidden: fall back to the personal source.
-  useEffect(()=>{const next=resolveSource(source,enterpriseEnabled);if(next!==source){setSelected('overview');setSource(next);}},[source,enterpriseEnabled]);
+  useEffect(()=>{const next=resolveSource(source,enterpriseEnabled);if(next!==source){if(!standalonePage)setSelected('overview');setSource(next);}},[source,enterpriseEnabled,standalonePage]);
   const [integrations,setIntegrations]=useState(null);
   useEffect(()=>{let active=true;apiFetch('/api/integrations').then(r=>r.ok ? r.json() : null).then(x=>{if(active)setIntegrations(x);}).catch(()=>{});return()=>{active=false;};},[selected,source]);
   // Garder page, source et période dans l'URL : une actualisation reste sur la page active
-  useEffect(()=>{const q=new URLSearchParams(window.location.search);q.set('page',selected);q.set('source',source);q.set('range',range);window.history.replaceState(null,'',`${window.location.pathname}?${q}${window.location.hash}`);},[selected,source,range]);
+  useEffect(()=>{const q=new URLSearchParams(window.location.search);q.set('page',selected);q.set('source',source);q.set('range',range);if(selected!=='monitor-session') for(const key of ['monitorSource','session','eventsOffset','modelOffset'])q.delete(key);window.history.replaceState(null,'',`${window.location.pathname}?${q}${window.location.hash}`);},[selected,source,range]);
   const initialDay = new Date().toLocaleDateString('en-CA');
   const [from, setFrom] = useState(initialDay), [to, setTo] = useState(initialDay);
   const {data, error, loading, refresh: fetchData} = useDashboard({source, range, from, to});
@@ -76,7 +80,7 @@ export default function App() {
         h?.burndown?.session?.remainingPercent);
   const personalReady=selected==='overview' ? Object.values(integrations?.personal?.observed || {}).some(Boolean) || Object.values(current?.harnesses || {}).some(h=>h?.burndown?.weekly || h?.burndown?.session) : integrations?.personal?.observed?.[selected] || detail?.burndown?.weekly || detail?.burndown?.session;
   const localReady=selected==='overview' ? Object.values(integrations?.corporateLocal?.observed || {}).some(Boolean) : integrations?.corporateLocal?.observed?.[selected];
-  const activation=integrations && !['admin','help','monitoring','context'].includes(selected) ? source==='enterprise' && !integrations.corporate.configured ? 'corporate' : source==='local' && !personalReady ? 'personal' : source==='enterprise-local' && !localReady ? 'local' : null : null;
+  const activation=integrations && !standalonePage ? source==='enterprise' && !integrations.corporate.configured ? 'corporate' : source==='local' && !personalReady ? 'personal' : source==='enterprise-local' && !localReady ? 'local' : null : null;
   const headerQuota =
     selected === 'overview'
       ? quota(current?.harnesses?.claude)
@@ -131,7 +135,7 @@ export default function App() {
             );
           })}
           <p className="sidebar-section">Métriques étendues</p>
-          <button className={`sidebar-item ${selected==='monitoring' ? 'active' : ''}`} onClick={()=>setSelected('monitoring')} aria-current={selected==='monitoring' ? 'page' : undefined}><span className="help-nav-icon" aria-hidden="true">↗</span><strong>Monitoring</strong><span className="integration-nav-level">3</span></button>
+          <button className={`sidebar-item ${monitoring ? 'active' : ''}`} onClick={()=>setSelected('monitoring')} aria-current={monitoring ? 'page' : undefined}><span className="help-nav-icon" aria-hidden="true">↗</span><strong>Monitoring</strong><span className="integration-nav-level">3</span></button>
         </nav>
         <div className="sidebar-help">
           <button className={`sidebar-item ${selected==='context' ? 'active':''}`} onClick={()=>setSelected('context')} aria-current={selected==='context' ? 'page':undefined}><span className="help-nav-icon" aria-hidden="true">◫</span><strong>Contexte et coût</strong></button>
@@ -153,13 +157,15 @@ export default function App() {
             {enterpriseEnabled && <option value="1">Niveau 1 · {label}</option>}<option value="2">Niveau 2 · Perso</option><option value="3">Niveau 3 · Toutes les fonctionnalités</option>
           </select></label>
         </div>}
-        {['help','admin','monitoring','context'].includes(selected) ? (
+        {standalonePage ? (
           <header className="header">
             <div className="toolbar-title">
               <button className="icon-button" aria-label="Toggle sidebar" onClick={() => setSidebarOpen(v => !v)}>☷</button>
-              <div><h1>{selected === 'context' ? 'Contexte et coût' : selected === 'admin' ? 'Admin' : selected==='monitoring' ? 'Monitoring' : 'Help'}</h1><p>{selected === 'context' ? 'Simulation pédagogique · contexte, cache et effort' : selected === 'admin' ? 'Configuration de l’application' : selected==='monitoring' ? 'Niveau 3 · Activité et contexte' : 'Sources de données et harnais'}</p></div>
+              <div><h1>{selected === 'context' ? 'Contexte et coût' : selected === 'admin' ? 'Admin' : monitoring ? 'Monitoring' : 'Help'}</h1><p>{selected === 'context' ? 'Simulation pédagogique · contexte, cache et effort' : selected === 'admin' ? 'Configuration de l’application' : monitoring ? 'Niveau 3 · Activité et contexte' : 'Sources de données et harnais'}</p></div>
             </div>
-            <button className="help-back" onClick={() => setSelected('overview')}>Retour au dashboard</button>
+            {selected==='monitor-session'
+              ? <a className="help-back monitor-back" href={monitoringListUrl()}>← Retour aux sessions</a>
+              : <button className="help-back" onClick={() => setSelected('overview')}>Retour au dashboard</button>}
           </header>
         ) : <Header
           title={selected === 'overview' ? source === 'enterprise' ? `${label}` : 'Overview' : names[selected]}
@@ -180,15 +186,16 @@ export default function App() {
           {selected === 'context' && <ContextCostPage onAdmin={()=>setSelected('admin')}/> }
           {selected === 'help' && <HelpPage />}
           {selected === 'admin' && <AdminPage integrations={integrations} enterpriseEnabled={enterpriseEnabled} onHelp={()=>setSelected('help')} />}
-          {selected==='monitoring' && <MonitoringPage integration={integrations?.monitoring} onAdmin={()=>setSelected('admin')} onHelp={()=>setSelected('help')}/>}
+          {selected==='monitoring' && <MonitoringPage onAdmin={()=>setSelected('admin')} onHelp={()=>setSelected('help')}/>}
+          {selected==='monitor-session' && <MonitoringSessionPage/>}
           {activation && !loading && <ActivationPage kind={activation} name={names[selected]} waiting={activation==='personal' && (selected==='overview' ? Object.values(integrations.personal.configured).some(Boolean) : integrations.personal.configured[selected])} onAdmin={()=>setSelected('admin')} onHelp={()=>setSelected('help')}/>}
-          {!['help','admin','monitoring','context'].includes(selected) && !activation && error && (
+          {!standalonePage && !activation && error && (
             <div className="error-banner">
               <strong>{current ? 'Refresh failed; showing previous metrics.' : 'Could not load data.'}</strong> {error}
             </div>
           )}
-          {!['help','admin','monitoring','context'].includes(selected) && loading && !current && <div className="loading">Loading…</div>}
-          {!['help','admin','monitoring','context'].includes(selected) && !activation && view && (
+          {!standalonePage && loading && !current && <div className="loading">Loading…</div>}
+          {!standalonePage && !activation && view && (
             <>
               {(current.warnings || []).map((w) => (
                 <div key={w} className="error-banner">

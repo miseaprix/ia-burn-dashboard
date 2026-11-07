@@ -50,7 +50,7 @@ test('SQLite retains years, isolates datasets, updates corrections without dupli
   ]);
   assert.deepEqual(db.files('claude', ['/logs']), ['/logs/past.jsonl']);
   assert.deepEqual(db.files('claude', ['/other']), []);
-  assert.equal(db.db.prepare('PRAGMA user_version').get().user_version, 7);
+  assert.equal(db.db.prepare('PRAGMA user_version').get().user_version, 9);
   assert.equal(db.db.prepare('PRAGMA journal_mode').get().journal_mode, 'wal');
   assert.equal(
     db.db.prepare('PRAGMA integrity_check').get().integrity_check,

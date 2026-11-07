@@ -43,8 +43,6 @@ export function migrateEnterpriseIds(db, env = process.env) {
     for (const [from, to] of Object.entries(LEGACY_SOURCE))
       db.prepare('UPDATE OR IGNORE collection_state SET source=? WHERE source=?').run(to, from);
     for (const table of ['monitor_sessions', 'monitor_events', 'monitor_usage']) monitorSource(table);
-    db.prepare('UPDATE monitor_requests SET payload=replace(payload,?,?) WHERE payload LIKE ?')
-      .run(`"dataset":"${LEGACY}"`, `"dataset":"${ENTERPRISE}"`, `%"dataset":"${LEGACY}"%`);
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');

@@ -1,4 +1,4 @@
-import {dashboard,integrations,monitoring,requests} from './data.mjs';
+import {dashboard,integrations,monitoring,monitoringSession,requests} from './data.mjs';
 import {demoReferenceCatalog,demoReferenceMatrix} from './calibration-reference.mjs';
 let calibration=null;
 
@@ -11,8 +11,13 @@ export async function apiFetch(input,{method='GET',body,signal}={}) {
   if(url.pathname==='/api/dashboard')result=dashboard(url.searchParams,{budget:settings.budget,level});
   else if(url.pathname==='/api/config')result={enterprise:{label:'Acme AI',enabled:true}};
   else if(url.pathname==='/api/integrations')result=integrations(level);
-  else if(url.pathname==='/api/monitor')result=monitoring(level);
-  else if(url.pathname==='/api/monitor/requests')result=requests(level);
+  else if(url.pathname==='/api/monitor')result=monitoring(level,url.searchParams);
+  else if(url.pathname==='/api/monitor/requests')result=requests(level,url.searchParams);
+  else if(url.pathname==='/api/monitor/model-requests')result={requests:[],total:0,limit:20,offset:0,comparison:null};
+  else if(url.pathname==='/api/monitor/session') {
+    result=monitoringSession(level,url.searchParams);
+    if(!result){status=404;result={error:{message:'Session introuvable'}};}
+  }
   else if(url.pathname==='/api/context/models' || url.pathname==='/api/admin/calibration/catalog')result=demoReferenceCatalog;
   else if(url.pathname==='/api/admin/calibration/matrix')result=demoReferenceMatrix;
   else if(url.pathname==='/api/admin/calibration' || url.pathname==='/api/admin/calibration/reconcile') {

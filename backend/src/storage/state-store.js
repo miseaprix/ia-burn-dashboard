@@ -26,7 +26,7 @@ export class StateStore {
       'PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;',
     );
     const version = this.db.prepare('PRAGMA user_version').get().user_version;
-    if (version > 7) {
+    if (version > 9) {
       this.db.close();
       throw new Error('Database schema is newer than this application');
     }
@@ -76,6 +76,35 @@ export class StateStore {
         CREATE TABLE monitor_requests(machine TEXT NOT NULL,id TEXT NOT NULL,timestamp TEXT NOT NULL,harness TEXT,session_id TEXT,project TEXT,ticket TEXT,payload TEXT NOT NULL,PRIMARY KEY(machine,id)) STRICT;
         CREATE INDEX monitor_requests_filters ON monitor_requests(timestamp,harness,project,ticket);
         PRAGMA user_version=7;
+        COMMIT;`);
+    if (version < 8)
+      this.db.exec(`BEGIN IMMEDIATE;
+        ALTER TABLE monitor_requests RENAME TO monitor_requests_v7;
+        CREATE TABLE monitor_requests(
+          dataset TEXT NOT NULL CHECK(dataset IN ('personal','enterprise')),
+          machine TEXT NOT NULL,id TEXT NOT NULL,timestamp TEXT NOT NULL,
+          harness TEXT,session_id TEXT,project TEXT,ticket TEXT,payload TEXT NOT NULL,
+          PRIMARY KEY(dataset,machine,id)
+        ) STRICT;
+        INSERT INTO monitor_requests(dataset,machine,id,timestamp,harness,session_id,project,ticket,payload)
+          SELECT 'enterprise',machine,id,timestamp,harness,session_id,project,ticket,
+            CASE WHEN json_extract(payload,'$.dataset')='accorgpt'
+              THEN json_set(payload,'$.dataset','enterprise') ELSE payload END
+          FROM monitor_requests_v7;
+        DROP TABLE monitor_requests_v7;
+        CREATE INDEX monitor_requests_filters ON monitor_requests(timestamp,harness,project,ticket);
+        CREATE INDEX monitor_requests_dataset_time ON monitor_requests(dataset,timestamp);
+        PRAGMA user_version=8;
+        COMMIT;`);
+    if (version < 9)
+      this.db.exec(`BEGIN IMMEDIATE;
+        CREATE TABLE monitor_model_requests(
+          source TEXT NOT NULL,session_id TEXT NOT NULL,id TEXT NOT NULL,timestamp TEXT NOT NULL,
+          task_id TEXT,payload TEXT NOT NULL,PRIMARY KEY(source,session_id,id)
+        ) STRICT;
+        CREATE INDEX monitor_model_requests_session ON monitor_model_requests(source,session_id,timestamp,id);
+        CREATE INDEX monitor_model_requests_task ON monitor_model_requests(task_id) WHERE task_id IS NOT NULL;
+        PRAGMA user_version=9;
         COMMIT;`);
     migrateEnterpriseIds(this.db);
     this.cacheRead = this.db.prepare(

@@ -234,8 +234,12 @@ persistant n’est encore fourni.
 - `GET /api/monitor?range=all&project=...&ticket=...&machine=...&source=...`
   retourne des sessions paginées (50), leur résumé et les filtres disponibles.
 - `range=custom&from=YYYY-MM-DD&to=YYYY-MM-DD` filtre la date UTC de démarrage.
-- `GET /api/monitor/session?source=...&id=...` retourne les métadonnées et les
-  500 premiers événements, ainsi que le nombre total d’événements.
+- `GET /api/monitor/session?source=...&id=...` retourne les métadonnées, le
+  nombre total d’événements et une page d’événements. Les paramètres `offset`
+  et `limit` permettent de consulter la chronologie. La limite par défaut est 500.
+- Les listes de sessions et d’échanges acceptent aussi `fromTime` et `toTime`
+  avec un fuseau explicite. Monitoring affiche la dernière heure par défaut
+  et permet de choisir une plage horaire ou tout l’historique.
 
 Les filtres et requêtes ne déclenchent aucune collecte. Prompts, réponses,
 arguments/sorties d’outils, chemins de transcripts et payloads bruts ne sont pas
@@ -267,12 +271,15 @@ additionnés sans établir leur couverture respective.
 
 ## Réception d’échanges API (compatibilité)
 
-`POST /api/monitor/requests` accepte encore des échanges API version 1 (métadonnées
-et compteurs `usage`, sans prompts ni réponses), stockés dans `monitor_requests`
-(migration additive **7**, clé machine + request_id, renvoi idempotent).
-`GET /api/monitor/requests` les expose paginés par 50. Aucun émetteur n’est fourni
-par ce dépôt ; ce point d’entrée est conservé pour la compatibilité. Même protection
-localhost et activation `MONITOR_INGEST_ENABLED=1` que les événements de hooks.
+`POST /api/monitor/requests` accepte les échanges API version 1 des datasets
+`personal` et `enterprise` (`accorgpt` reste un alias Enterprise). Le récepteur
+stocke les métadonnées et compteurs `usage` dans `monitor_requests`, sans les
+prompts ni les réponses. Le schéma **8** conserve les échanges historiques dans
+`enterprise` et déduplique les renvois par dataset, machine et `request_id`.
+`GET /api/monitor/requests` expose les deux environnements par défaut, paginés
+par 50. Le paramètre `dataset` limite la liste et son résumé à un environnement.
+Aucun émetteur n’est fourni par ce dépôt. Le récepteur conserve la protection
+localhost et l’activation `MONITOR_INGEST_ENABLED=1` des événements de hooks.
 
 ## Découverte et activation dans l’interface
 
@@ -287,3 +294,48 @@ fictive présentée comme réelle. Admin et Help expliquent les niveaux 1/2/3.
 Les boutons conduisent à Admin et au guide. Ils ne modifient pas automatiquement
 les montages de journaux ni les hooks. Les niveaux 2 et 3 demandent encore les
 réglages du déploiement et des harnais décrits dans ces guides.
+
+### Mesures du modèle et contenu du contexte
+
+Le détail d’une session affiche les mesures importées par le récepteur local
+`/api/monitor/model-requests`. La migration SQLite 9 ajoute ces mesures sans
+les additionner aux agrégats de consommation existants.
+
+L’importeur Node accepte trois formats. Le dataset doit être explicite.
+
+```bash
+node scripts/import-model-requests.mjs --claude-dir /chemin/capture --dataset personal --provider anthropic --billing subscription
+node scripts/import-model-requests.mjs --codex-log /chemin/rollout.jsonl --dataset personal
+node scripts/import-model-requests.mjs --opencode-db /chemin/opencode.db --session ID --dataset personal
+```
+
+- **Claude Code** lit l’index natif et les paires de fichiers requête/réponse.
+  Activer la capture sur l’exécution à mesurer avec
+  `CLAUDE_CODE_ENABLE_TELEMETRY=1`, `OTEL_LOGS_EXPORTER=console` et
+  `OTEL_LOG_RAW_API_BODIES=file:/chemin/capture`. Choisir un répertoire privé.
+  L’option `--skills-dir` permet de comparer le contenu injecté aux fichiers
+  source du répertoire explicitement sélectionné. Sans correspondance vérifiée,
+  le détail indique que l’étendue du contenu est inconnue.
+- **Codex** lit les compteurs par appel et les éléments visibles dans le journal
+  sélectionné : catalogue de skills (nom et description), appels et résultats
+  d’outils ou de MCP, et blocs `AGENTS.md` reconnus. Avec `--skills-dir`,
+  un résultat qui correspond intégralement au fichier source approuvé est
+  identifié comme tel. L’activité est rattachée à la fenêtre entre deux compteurs
+  du même tour. Le journal ne fournit pas la requête complète ni les schémas.
+  Réimporter avec les mêmes métadonnées complète un ancien import sans contexte.
+- **OpenCode 2** lit les compteurs des messages assistant terminés dans la base
+  sélectionnée, en lecture seule.
+- Pour comparer plusieurs exécutions, passer le même identifiant de tâche
+  explicite via `--task`, par exemple l’UUID Paperclip ou une référence GitLab
+  incluant le projet. `--run`, `--orchestrator`, `--provider`, `--gateway`
+  et `--billing` complètent l’attribution. Pour Claude, préciser `--session`
+  avec `--task` ou `--run`. Le récepteur par défaut écoute sur localhost:4095.
+  Utiliser `--url` pour un autre port et `--machine` si les hooks utilisent
+  un identifiant de machine personnalisé.
+
+Burn conserve les noms, les descriptions de skills, les tailles et les compteurs.
+Les prompts complets, les corps de fichiers et les résultats d’outils restent
+dans les fichiers de capture locaux. Les estimations par bloc utilisent
+quatre octets par jeton et peuvent se recouvrir avec un bloc parent. Les champs
+absents restent inconnus et les mesures conservent leur niveau d’observation
+(appel, message assistant ou tour).
