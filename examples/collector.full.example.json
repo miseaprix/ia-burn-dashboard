@@ -1,0 +1,27 @@
+{
+  "receiver": "http://127.0.0.1:4095/api/monitor/model-requests",
+  "since": "2026-11-07T20:00:00Z",
+  "claudeLogs": [
+    { "directory": "/Users/alice/.claude", "dataset": "personal" },
+    { "directory": "/Users/alice/.claude-enterprise", "dataset": "enterprise" }
+  ],
+  "codexLogs": [
+    { "directory": "/Users/alice/.codex", "dataset": "personal" },
+    { "directory": "/Users/alice/.codex-enterprise", "dataset": "enterprise" }
+  ],
+  "claudeCaptures": [
+    { "directory": "/Users/alice/.local/state/ia-burn/claude-capture/direct", "dataset": "personal" },
+    { "directory": "/Users/alice/.local/state/ia-burn/claude-capture/direct-enterprise", "dataset": "enterprise" },
+    { "directory": "/Users/alice/.local/state/ia-burn/claude-capture/paperclip", "dataset": "personal", "paperclip": true }
+  ],
+  "paperclip": "http://127.0.0.1:3100/api/",
+  "paperclipDatasets": {
+    "00000000-0000-4000-8000-000000000001": "enterprise"
+  },
+  "openCodeDb": "/Users/alice/.local/share/opencode/opencode.db",
+  "openCodeProviders": {
+    "openai": "personal",
+    "my-enterprise-provider": "enterprise"
+  },
+  "openCodeCapture": "/Users/alice/.local/state/ia-burn/opencode-capture"
+}

@@ -95,6 +95,10 @@ observé. Leur disponibilité dépend du harnais et des sources activées. Le gu
 détaille les réglages de Claude Code, Codex et OpenCode 2, ainsi que leur
 couverture lorsqu’ils sont lancés par Paperclip.
 
+Pour créer `collector.json`, partez du [modèle Claude Code et Codex](examples/collector.example.json)
+ou de l’[exemple complet](examples/collector.full.example.json) avec profils entreprise,
+captures, OpenCode et Paperclip.
+
 Voir les guides [configuration](docs/CONFIGURATION.md),
 [collecte Monitoring](docs/MONITORING.md).
 

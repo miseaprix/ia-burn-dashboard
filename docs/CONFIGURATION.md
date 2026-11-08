@@ -49,6 +49,8 @@ flowchart TD
 ```
 
 Les montages peuvent être dérivés du fichier du collecteur avec `--profiles`.
+Pour préparer ce fichier, utilisez le [modèle de départ](../examples/collector.example.json)
+ou l’[exemple complet](../examples/collector.full.example.json).
 Le guide Monitoring décrit le choix du dossier principal, l’aperçu et le retour
 aux montages historiques. [Profils partagés avec Docker](MONITORING.md#profils-partagés-avec-docker)
 

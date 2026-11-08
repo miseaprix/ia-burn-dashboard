@@ -1,0 +1,10 @@
+{
+  "receiver": "http://127.0.0.1:4095/api/monitor/model-requests",
+  "since": "2026-11-07T20:00:00Z",
+  "claudeLogs": [
+    { "directory": "/Users/alice/.claude", "dataset": "personal" }
+  ],
+  "codexLogs": [
+    { "directory": "/Users/alice/.codex", "dataset": "personal" }
+  ]
+}

@@ -426,30 +426,23 @@ Le fichier de configuration accepte les propriétés suivantes.
 | `openCodeDb`, `openCodeProviders` | Chemin vers `opencode.db`, puis correspondance entre identifiants de fournisseurs et datasets |
 | `openCodeCapture` | Répertoire privé partagé avec l’option `captureDirectory` du plugin OpenCode |
 
-Exemple de `~/.local/state/ia-burn/collector.json` sur macOS. Remplacez
-`/Users/alice` par le chemin de votre compte et `since` par votre date de départ.
-Gardez les entrées correspondant aux harnais et profils que vous utilisez.
+Choisissez le [modèle de départ](../examples/collector.example.json) pour Claude
+Code et Codex personnels ou l’[exemple complet](../examples/collector.full.example.json)
+pour ajouter des profils entreprise, des captures Claude, OpenCode ou Paperclip.
 
-```json
-{
-  "receiver": "http://127.0.0.1:4095/api/monitor/model-requests",
-  "since": "2026-11-07T20:00:00Z",
-  "claudeLogs": [
-    { "directory": "/Users/alice/.claude", "dataset": "personal" }
-  ],
-  "claudeCaptures": [
-    { "directory": "/Users/alice/.local/state/ia-burn/claude-capture/direct", "dataset": "personal" },
-    { "directory": "/Users/alice/.local/state/ia-burn/claude-capture/paperclip", "dataset": "personal", "paperclip": true }
-  ],
-  "paperclip": "http://127.0.0.1:3100/api/",
-  "codexLogs": [
-    { "directory": "/Users/alice/.codex", "dataset": "personal" }
-  ],
-  "openCodeDb": "/Users/alice/.local/share/opencode/opencode.db",
-  "openCodeProviders": { "openai": "personal", "deepseek": "personal" },
-  "openCodeCapture": "/Users/alice/.local/state/ia-burn/opencode-capture"
-}
+Depuis le dépôt, copiez le modèle. La commande préserve un fichier existant.
+
+```bash
+umask 077
+mkdir -p -m 700 ~/.local/state/ia-burn
+cp -n examples/collector.example.json ~/.local/state/ia-burn/collector.json
 ```
+
+Remplacez les chemins `/Users/alice/…` par vos chemins absolus, la date
+`since` par le début de collecte souhaité et le port de `receiver` par celui
+de votre instance IA Burn. Avec l’exemple complet, conservez les blocs
+des harnais utilisés et renseignez les identifiants de fournisseurs OpenCode
+et de sociétés Paperclip qui vous concernent.
 
 Le déploiement Docker démarre le récepteur. Pour un premier essai du collecteur,
 exécutez cette commande au premier plan depuis le dépôt sur le poste hôte.

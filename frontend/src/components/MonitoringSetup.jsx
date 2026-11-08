@@ -94,12 +94,11 @@ export default function MonitoringSetup() {
         </Step>
         <Step title="Créer la configuration du collecteur" location={collector}>
           <p><code>~</code> désigne le dossier personnel du compte qui lance le collecteur sur le poste hôte. Le collecteur lit ce fichier et envoie les mesures au conteneur IA Burn via l’adresse HTTP <code>receiver</code>.</p>
-          <p>Créez le fichier avec ces deux clés. Remplacez la date d’exemple par le début de collecte souhaité, puis ajoutez les clés de votre harnais au même objet JSON.</p>
-          <Code>mkdir -p -m 700 ~/.local/state/ia-burn</Code>
-          <Code language="json">{`{
-  "receiver": "http://127.0.0.1:4095/api/monitor/model-requests",
-  "since": "2026-11-07T20:00:00Z"
-}`}</Code>
+          <p>Depuis le dépôt, copiez le modèle Claude Code et Codex. La commande préserve un fichier existant. Le modèle <FilePath>examples/collector.full.example.json</FilePath> couvre aussi les profils entreprise, les captures, OpenCode et Paperclip.</p>
+          <Code>{`umask 077
+mkdir -p -m 700 ~/.local/state/ia-burn
+cp -n examples/collector.example.json ~/.local/state/ia-burn/collector.json`}</Code>
+          <p>Adaptez les chemins absolus à votre compte, la date <code>since</code> au début de collecte souhaité et le port de <code>receiver</code> à votre instance IA Burn.</p>
         </Step>
         <Step title="Démarrer la collecte en continu" location="Terminal du poste qui exécute les agents → dépôt IA Burn">
           <p>Le déploiement Docker démarre le récepteur. Pour démarrer le collecteur à la connexion, configurez une fois un service utilisateur sur le poste hôte, par exemple <code>launchd</code> sur macOS. Relancez le service après toute modification de <FilePath>collector.json</FilePath>.</p>
