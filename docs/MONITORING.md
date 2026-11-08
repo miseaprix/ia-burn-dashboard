@@ -304,26 +304,115 @@ les additionner aux agrégats de consommation existants.
 
 #### Configuration du niveau 3 par harnais
 
-Activez `MONITOR_INGEST_ENABLED=1` dans `.env`, puis déployez Burn sur le port
-choisi. Les exemples suivants utilisent `./deploy.sh --port 4095` et Node.js 24+
-sur le poste qui exécute les harnais.
+**Sur quoi repose la collecte.** Les hooks et plugins décrivent l’activité.
+Les journaux et bases des harnais fournissent les compteurs du modèle. Les
+captures ajoutent le détail du contexte quand le harnais l’expose.
+
+```mermaid
+flowchart TD
+  A["collector.json<br/>Dossier · harnais · dataset"] --> B["Docker<br/>Journaux montés en lecture seule"]
+  A --> C["Collecteur sur le poste hôte<br/>Journaux et captures"]
+  B --> D["Dashboard<br/>Historique, consommation et coûts"]
+  B -.-> E["Chronologie Codex de secours"]
+  C --> F["Monitoring niveau 3<br/>Événements, mesures et contexte"]
+  G["Hooks et plugins"] --> F
+```
 
 | Harnais | Activité | Compteurs du modèle | Détail du contexte |
 | --- | --- | --- | --- |
 | Claude Code | Hooks du profil | `claudeLogs` | Capture native des requêtes et réponses |
-| Paperclip local avec Claude Code/ACP | Selon les hooks disponibles dans l’agent | Journal Claude ou capture | Lanceur `CLAUDE_CODE_EXECUTABLE` et dossier privé |
 | Codex | Hooks approuvés dans le CLI ou journal local en secours | `codexLogs` | Éléments observables dans le journal |
 | OpenCode 2 | Plugin Burn | Messages assistant terminés dans `openCodeDb` | Résumé HTTP ou trame WebSocket sortante via le plugin |
 
+Pour les agents orchestrés par Paperclip, consultez la
+[couverture par harnais](#paperclip--couverture-par-harnais).
+
+##### Installation guidée sur macOS
+
+Depuis le dépôt IA Burn avec Node.js 24 ou plus récent, affichez l’aperçu.
+Le script indique chaque fichier et colore ses messages dans le terminal.
+
+```bash
+node scripts/install-monitoring.mjs --claude --codex --deploy
+```
+
+Relancez avec `--apply` pour préparer les journaux Claude et Codex, la capture
+Claude, les hooks et le service `launchd`. `--deploy` active le récepteur dans
+`.env` et le redéploie. `--port` permet de choisir le port. Par défaut, le
+script reprend celui du récepteur existant ou utilise `4095`.
+
+Pour un autre emplacement, donnez le dossier du profil Claude ou Codex. Lancez
+une commande par dataset. Chaque option de profil peut être répétée dans la même
+commande. Exemple avec deux profils entreprise et un deuxième profil Claude.
+
+```bash
+node scripts/install-monitoring.mjs --dataset enterprise \
+  --claude-profile ~/.claude-accor --claude-profile ~/.claude-autre \
+  --codex-profile ~/.codex-accor
+```
+
+Pour migrer des hooks Burn d’un ancien clone, ajoutez `--replace-hooks` à
+l’aperçu. Avec `--apply`, le script sauvegarde le fichier et remplace les
+entrées IA Burn du dataset choisi. Pour `enterprise`, il reprend aussi les
+entrées enregistrées sous l’ancien nom `accorgpt`. Approuvez les hooks Codex modifiés dans
+`/hooks`. L’installateur reprend le collecteur existant et ses sources. Pour
+ajouter OpenCode ou Paperclip, utilisez les procédures dédiées ci-dessous.
+
+##### Profils partagés avec Docker
+
+Sur le poste hôte, déclarez les dossiers dans `claudeLogs` et `codexLogs`,
+avec leurs datasets. Docker utilise ce même fichier pour préparer ses montages
+en lecture seule. Pour OpenCode, `openCodeDb` peut aussi fournir le chemin absolu
+de la base `opencode.db`. Le dossier est monté pour rendre son journal WAL
+accessible. Le collecteur hôte et Docker exécutent chacun leur propre lecture.
+
+```bash
+./deploy.sh --port 4095 --profiles ~/.local/state/ia-burn/collector.json --check
+./deploy.sh --port 4095 --profiles ~/.local/state/ia-burn/collector.json
+```
+
+Si le fichier contient plusieurs dossiers pour un couple harnais et dataset,
+le montage principal garde son dossier actuel lorsqu’il figure dans la liste.
+Sinon, le premier dossier déclaré devient le montage principal. Les autres
+alimentent la consommation et le secours Codex. Les quotas personnels utilisent
+le montage principal. Pour un couple absent du fichier, Docker reprend la
+configuration `.env` ou le chemin par défaut.
+
+Pour revenir aux montages précédents, redéployez sans `--profiles`. Le volume
+SQLite reste en place. Si vous avez aussi modifié la liste des sources du
+collecteur hôte, restaurez sa configuration sauvegardée et relancez le service.
+
+```bash
+./deploy.sh --port 4095
+```
+
+##### Préparation commune
+
+**Où.** Dépôt IA Burn → `.env`. Ajoutez cette ligne.
+
+```dotenv
+MONITOR_INGEST_ENABLED=1
+```
+
+Depuis le dépôt, déployez Burn sur le port choisi. Les exemples suivants
+utilisent le port `4095` et Node.js 24+ sur le poste qui exécute les harnais.
+
+```bash
+./deploy.sh --port 4095
+```
+
 ##### Collecteur commun sur le poste
 
-Le processus hôte `node scripts/collect-model-requests.mjs /chemin/collector.json`
-recherche les nouvelles mesures toutes les 15 secondes. Le lancer comme service
-utilisateur (par exemple `launchd` sur macOS). Il reprend les captures Claude en
-attente, puis lit les journaux Claude et Codex ainsi que la base OpenCode. Les
-sources de journaux démarrent à la date `since`. Les captures reçues dans les
-répertoires privés restent en attente jusqu’à leur import. Les fichiers bruts
-indexés sont supprimés après l’accusé de réception local d’IA Burn.
+**Où.** Créez `~/.local/state/ia-burn/collector.json` sur le poste hôte. `~`
+désigne le dossier personnel du compte qui lance le collecteur. Le collecteur
+lit ce fichier et envoie les mesures au conteneur IA Burn via l’adresse HTTP
+`receiver`. Renseignez `receiver` et `since`, puis ajoutez les clés des harnais
+utilisés.
+
+Le collecteur recherche les nouvelles mesures toutes les 15 secondes. Il
+reprend les captures Claude en attente, puis lit les journaux Claude et Codex
+ainsi que la base OpenCode. La lecture de ces journaux et de la base commence à
+la date `since`.
 
 Le fichier de configuration accepte les propriétés suivantes.
 
@@ -362,20 +451,55 @@ Gardez les entrées correspondant aux harnais et profils que vous utilisez.
 }
 ```
 
-Sur macOS, le service utilisateur `launchd` peut lancer ce processus à la
-connexion avec `RunAtLoad` et le relancer avec `KeepAlive`. Utilisez les chemins
-absolus de Node, du script et de la configuration dans `ProgramArguments`.
-Le collecteur se lance depuis le poste hôte, avec accès aux journaux et aux
-dossiers de capture.
+Le déploiement Docker démarre le récepteur. Pour un premier essai du collecteur,
+exécutez cette commande au premier plan depuis le dépôt sur le poste hôte.
+
+```bash
+node scripts/collect-model-requests.mjs ~/.local/state/ia-burn/collector.json
+```
+
+Pour la collecte continue, configurez un service utilisateur. Sur macOS,
+`launchd` lance le collecteur à la connexion avec `RunAtLoad` et le relance
+avec `KeepAlive`. Utilisez les chemins absolus de Node, du script et de la
+configuration dans `ProgramArguments`. Une fois le service chargé, il exécute
+la commande automatiquement. Redémarrez le service après chaque modification
+de `collector.json`.
 
 ##### Claude Code en direct
 
-1. Pour les événements, [installez les hooks Claude Code](#collecteur-natif-claude-code-perso-et-enterprise)
-   dans le profil voulu. Pour les compteurs, ajoutez sa racine
-   `CLAUDE_CONFIG_DIR` à `claudeLogs`.
-2. Pour la capture, créez un dossier de mode `0700`, ajoutez-le à
-   `claudeCaptures` et fusionnez ces clés dans `env` du `settings.json`
-   utilisateur du profil. Utilisez un chemin absolu.
+**Sur quoi repose la collecte.** Les hooks remontent les événements, le journal
+fournit les compteurs et la capture native décrit le contexte des requêtes.
+
+1. **Terminal → dépôt IA Burn.** [Installez les hooks Claude Code](#collecteur-natif-claude-code-perso-et-enterprise).
+   Cette commande ajoute les entrées Burn dans `~/.claude/settings.json` → `hooks`.
+   Utilisez `--settings /chemin/du/profil/settings.json` pour cibler un autre profil.
+
+   ```bash
+   node scripts/install-claude-monitor.mjs --dataset personal --apply
+   ```
+
+   Pour configurer uniquement le démarrage de session à la main, ajoutez cet
+   objet à la liste `hooks.SessionStart` dans `~/.claude/settings.json`.
+   Créez la liste si elle manque ou conservez ses entrées si elle existe.
+   Adaptez les deux chemins absolus, le dataset et le port. L’installateur
+   configure les dix événements Burn.
+
+   ```json
+   {
+     "matcher": "*",
+     "hooks": [
+       {
+         "type": "command",
+         "command": "'/opt/homebrew/bin/node' '/Users/alice/dev/ia-burn-dashboard/scripts/claude-monitor-hook.mjs' '--dataset' 'personal' '--url' 'http://localhost:4095/api/monitor/events'",
+         "timeout": 5
+       }
+     ]
+   }
+   ```
+
+2. **Profil Claude Code → `settings.json` → `env`.** Créez un dossier de mode
+   `0700`. Fusionnez les trois variables ci-dessous avec celles déjà présentes
+   et utilisez un chemin absolu.
 
    ```json
    {
@@ -387,46 +511,117 @@ dossiers de capture.
    }
    ```
 
-3. Ouvrez une nouvelle session. L’import lit l’index natif, disponible depuis
-   Claude Code 2.1.274. Utilisez un dossier de capture distinct par dataset.
+3. **`collector.json`.** Ajoutez la racine du profil (`CLAUDE_CONFIG_DIR` ou
+   `~/.claude`) à **`claudeLogs`** et le dossier privé à **`claudeCaptures`**.
+   Utilisez un dossier de capture distinct par dataset. Ouvrez une nouvelle
+   session. L’import lit l’index natif, disponible depuis Claude Code 2.1.274.
    [Capture native Claude Code](https://code.claude.com/docs/en/monitoring-usage#api-response-body-event).
 
-##### Paperclip local avec Claude Code via ACP
+##### Paperclip · Couverture par harnais
 
-1. Créez le dossier privé `~/.local/state/ia-burn/claude-capture/paperclip`
-   (mode `0700`).
-2. Dans **Environment variables** de l’adaptateur de l’agent, définissez
-   `CLAUDE_CODE_EXECUTABLE` sur le chemin absolu de
-   `scripts/claude-paperclip-capture.mjs`. Ce lanceur macOS utilise Node et
-   le binaire Claude Code installé sous `~/.local/bin/claude`.
-3. Dans `collector.json`, ajoutez le dossier à `claudeCaptures` avec
-   `paperclip: true`, puis configurez l’URL `paperclip`. Si plusieurs sociétés
-   utilisent des datasets différents, renseignez `paperclipDatasets` avec
-   leur UUID comme clé et `personal` ou `enterprise` comme valeur.
-   Le collecteur rattache l’appel à l’exécution et au ticket via l’identifiant
-   de session Claude et l’horodatage.
+Paperclip orchestre les agents. Sur le même poste, Burn collecte les mesures
+dans les sources du harnais réellement utilisé par chaque agent.
+
+| Adaptateur Paperclip | Source pour Burn | Rattachement à l’exécution et au ticket |
+| --- | --- | --- |
+| Claude Code local via ACP | Capture native via le lanceur ci-dessous, ou journal Claude | Vérifié de bout en bout avec la capture native |
+| Codex local | Journaux de la racine `CODEX_HOME` effective | Tenté à partir du journal, à valider de bout en bout |
+| OpenCode local avec OpenCode 2 | Base et plugin du profil de l’agent | Tenté pour les captures du plugin, à valider de bout en bout. Les compteurs lus dans la base restent associés à la session OpenCode. |
+| Gemini, Cursor, Pi, Grok, Kimi, Hermes, OpenClaw et agents distants | Aucune source Paperclip intégrée au niveau 3 | Indisponible |
+
+Pour le rattachement, `paperclip` doit pointer vers l’API locale. Le collecteur
+cherche une exécution dont l’identifiant de session et la fenêtre horaire
+correspondent à la mesure. Il renseigne l’exécution et le ticket lorsqu’il
+trouve une correspondance unique.
+
+###### Claude Code local via ACP
+
+1. **Terminal du poste Paperclip.** Créez le dossier privé du compte qui lance
+   l’agent. Le lanceur macOS utilise Node et le binaire `~/.local/bin/claude`.
+
+   ```bash
+   mkdir -p -m 700 ~/.local/state/ia-burn/claude-capture/paperclip
+   ```
+
+2. **Paperclip → Agents → votre agent → Secrets & variables → Environment variables.**
+   Cliquez sur **Add variable**, renseignez les deux champs, puis cliquez sur **Save**.
+
+   | Champ | Valeur |
+   | --- | --- |
+   | Nom | **`CLAUDE_CODE_EXECUTABLE`** |
+   | Valeur | Chemin absolu du lanceur, par exemple `/Users/alice/dev/ia-burn-dashboard/scripts/claude-paperclip-capture.mjs` |
+
+3. **`collector.json`.** Ajoutez l’entrée à la liste existante **`claudeCaptures`**
+   et adaptez le port de l’API **`paperclip`**.
+
+   ```json
+   {
+     "claudeCaptures": [
+       { "directory": "/Users/alice/.local/state/ia-burn/claude-capture/paperclip", "dataset": "personal", "paperclip": true }
+     ],
+     "paperclip": "http://127.0.0.1:3100/api/"
+   }
+   ```
+
+   Si plusieurs sociétés utilisent des datasets différents, renseignez
+   `paperclipDatasets` avec leur UUID comme clé et `personal` ou `enterprise`
+   comme valeur.
+
+###### Codex local dans Paperclip
+
+1. **Paperclip → Agents → votre agent → Secrets & variables → Environment variables.**
+   Relevez la valeur de `CODEX_HOME` si elle est renseignée. Sinon, cherchez le
+   dossier `codex-home` géré par l’agent, par exemple
+   `~/.paperclip/instances/<instance>/companies/<société>/agents/<agent>/codex-home`.
+2. **`collector.json` → `codexLogs`.** Ajoutez le chemin absolu de cette racine
+   avec le dataset voulu. Burn doit pouvoir lire ses journaux `sessions` et
+   `archived_sessions`. Voir l’[exemple Codex](#codex).
+
+###### OpenCode local dans Paperclip
+
+1. **Paperclip → Agents → votre agent → Harness / Runtime.** Vérifiez que
+   l’agent utilise OpenCode 2. Dans **Secrets & variables → Environment variables**,
+   relevez `XDG_CONFIG_HOME` et `XDG_DATA_HOME` s’ils sont définis.
+2. **Profil global de l’agent → `opencode.json` → `plugins`.** Suivez la
+   [procédure OpenCode 2](#opencode-2). Si le profil est personnalisé, passez
+   son chemin à l’installateur avec **`--config`**.
+3. **`collector.json`.** Renseignez **`openCodeDb`** avec la base utilisée par
+   l’agent, **`openCodeProviders`** avec ses fournisseurs et **`openCodeCapture`**
+   avec le dossier déclaré dans le plugin. Burn doit pouvoir lire ces fichiers.
 
 ##### Codex
 
-- Pour les compteurs et le contexte observable, ajoutez chaque racine
-  `CODEX_HOME` à `codexLogs` avec son dataset. Les journaux `sessions` et
-  `archived_sessions` restent la source. Le corps de la requête au modèle et
-  les schémas d’outils restent indisponibles dans ces journaux.
-- Pour les hooks en direct, [installez et approuvez les hooks Codex](#collecteur-natif-codex)
-  depuis le CLI avec `/hooks`. Quand aucun événement de hook n’a été reçu,
-  le backend peut reconstruire la chronologie à partir du journal si le
-  dossier Codex correspondant est monté en lecture seule.
+**Sur quoi repose la collecte.** Les journaux `sessions` et `archived_sessions`
+fournissent les compteurs et le contexte journalisé. Le corps de la requête au
+modèle et les schémas d’outils restent indisponibles dans ces journaux.
+
+1. **`collector.json` → `codexLogs`.** Ajoutez chaque racine `CODEX_HOME` avec
+   son dataset. Exemple pour un profil personnel.
+
+   ```json
+   {
+     "codexLogs": [
+       { "directory": "/Users/alice/.codex", "dataset": "personal" }
+     ]
+   }
+   ```
+
+2. **Terminal → dépôt IA Burn, puis CLI Codex → `/hooks`.** Pour les événements
+   en direct, [installez et approuvez les hooks Codex](#collecteur-natif-codex).
+   Quand aucun événement de hook n’a été reçu, le backend peut reconstruire
+   la chronologie si le dossier Codex est monté en lecture seule.
 
 ##### OpenCode 2
 
-1. [Installez le plugin OpenCode](#plugin-opencode-2), puis renseignez
-   `openCodeDb` et `openCodeProviders` dans `collector.json`. Les clés de
-   `openCodeProviders` sont les identifiants de fournisseurs OpenCode.
-2. Pour le contexte, créez un dossier de mode `0700`. Indiquez le même chemin
-   dans `openCodeCapture` et dans l’option `captureDirectory` du plugin
-   `ia-burn.monitor` dans `~/.config/opencode/opencode.json`. Conservez
-   les options `datasets` et `url` installées, puis adaptez `providers`
-   à vos identifiants. Par exemple, pour un compte DeepSeek direct :
+**Sur quoi repose la collecte.** La base locale fournit les compteurs des
+messages assistant terminés. Le plugin fournit les événements et, lorsque la
+capture est activée, le résumé du contexte des requêtes.
+
+1. **Terminal → dépôt IA Burn.** [Installez le plugin OpenCode](#plugin-opencode-2).
+   L’installateur ajoute une entrée dans `~/.config/opencode/opencode.json` → `plugins`.
+2. **`opencode.json` → `plugins` → entrée Burn → `options`.** Créez un dossier
+   de mode `0700`. Conservez les options `datasets` et `url` installées et
+   ajoutez **`captureDirectory`** et **`providers`**. Exemple avec DeepSeek.
 
    ```json
    {
@@ -435,13 +630,35 @@ dossiers de capture.
    }
    ```
 
-3. Rechargez OpenCode. Le plugin dépose les résumés HTTP et les trames
+3. **`collector.json`.** Renseignez **`openCodeDb`**, **`openCodeProviders`**
+   et **`openCodeCapture`**. Utilisez les identifiants OpenCode comme clés du
+   mapping et le même dossier que `captureDirectory`.
+
+   ```json
+   {
+     "openCodeDb": "/Users/alice/.local/share/opencode/opencode.db",
+     "openCodeProviders": { "deepseek": "personal" },
+     "openCodeCapture": "/Users/alice/.local/state/ia-burn/opencode-capture"
+   }
+   ```
+
+4. Rechargez OpenCode. Le plugin résume les requêtes HTTP et les trames
    WebSocket sortantes qu’il observe. Une trame peut porter uniquement le
    contexte ajouté depuis l’appel précédent. Les compteurs des messages
    assistant et le contexte des requêtes sont affichés séparément.
 
 Lancez une courte session, puis ouvrez **Monitoring → Sessions avec mesures**.
 Vérifiez le harnais, le dataset et la provenance de la mesure dans le détail.
+
+##### Conservation des journaux et captures
+
+| Données | Suppression automatique par IA Burn |
+| --- | --- |
+| Journaux de session Claude Code et Codex, base OpenCode | Lecture seule. Leur durée de conservation dépend de leur harnais. |
+| Captures brutes Claude Code, y compris celles des agents Paperclip | La paire `.request.json` / `.response.json` est supprimée après confirmation de l’import et sauvegarde de la progression. Les captures en attente ou rejetées restent sur disque. |
+| Index de capture Claude Code `index.jsonl` | Conservé. IA Burn mémorise sa position de lecture dans `collector-state.json`. |
+| Résumés OpenCode en attente | Supprimés après confirmation de l’import. Si l’envoi échoue, le fichier reste en attente. |
+| Événements et mesures importés dans SQLite | Conservés sans purge automatique au niveau 3. |
 
 #### Import manuel
 

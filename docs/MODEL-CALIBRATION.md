@@ -33,6 +33,17 @@ au cache dépendent du modèle et de son fournisseur.
 
 ## Actualisation à la demande dans Admin
 
+```mermaid
+flowchart LR
+  A["Catalogue et tarifs"] --> B["Choix des modèles et du budget"]
+  B --> C["Relevé avant l’appel"]
+  C --> D["Un appel au modèle"]
+  D --> E["Relevé après l’appel"]
+  E --> F{"Écart attribuable ?"}
+  F -->|Oui| G["Enregistrer le résultat"]
+  F -->|Non| H["Arrêter la campagne"]
+```
+
 1. Configurer sa propre clé API Enterprise dans Admin.
 2. **Actualiser les modèles et tarifs** : GET directs /v1/models et /model/info,
    sans génération ni proxy. Tous les identifiants, y compris audio/image/embedding,

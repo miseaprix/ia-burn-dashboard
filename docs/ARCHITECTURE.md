@@ -26,6 +26,19 @@ L'intégration Claude Code Monitor et SSE restent une deuxième phase.
 
 ## Collecte autonome
 
+```mermaid
+flowchart LR
+  A["Journaux Docker"] --> B["Collecte locale"]
+  Q["API et caches de quotas"] --> B
+  C["API Enterprise"] --> D["Collecte Enterprise"]
+  B --> S[(Historique)]
+  D --> S
+  S --> U["Dashboard"]
+  E["Collecteur hôte et hooks"] --> I["Récepteur Monitoring"]
+  I --> M[(Sessions et mesures)]
+  M --> V["Monitoring niveau 3"]
+```
+
 La collecte commence au démarrage du serveur, même sans navigateur. Chaque source
 possède sa boucle et une seule tâche en cours ; les erreurs gardent les dernières
 données et appliquent une temporisation progressive bornée à 15 minutes. Les

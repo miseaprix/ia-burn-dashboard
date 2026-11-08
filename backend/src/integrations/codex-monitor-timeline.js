@@ -2,7 +2,7 @@ import { createReadStream } from 'node:fs';
 import { glob, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
-import { enterpriseDirs } from '../config/enterprise.js';
+import { localLogRoots } from '../config/local-profile-roots.js';
 
 const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const name = value => typeof value === 'string' && /^[\w.:-]{1,256}$/.test(value) ? value : null;
@@ -25,14 +25,15 @@ function itemEvent(item) {
 export async function codexMonitorTimeline(session, offset, limit, env = process.env) {
   if (session.harness !== 'codex' || !uuid.test(session.id) ||
       !['personal', 'enterprise'].includes(session.dataset)) return null;
-  const directory = session.dataset === 'enterprise' ? enterpriseDirs(env).codex : env.CODEX_HOME || '/data/codex';
-  for await (const relative of glob(`{sessions,archived_sessions}/**/*-${session.id}.jsonl`, { cwd: directory })) {
-    const file = path.join(directory, relative);
-    try {
-      if (!(await lstat(file)).isFile()) continue;
-      const data = await readTimeline(file, session.id, offset, limit);
-      if (data) return data;
-    } catch { /* Rotated or temporarily unavailable journals do not block session details. */ }
+  for (const directory of localLogRoots('codex', session.dataset, env)) {
+    for await (const relative of glob(`{sessions,archived_sessions}/**/*-${session.id}.jsonl`, { cwd: directory })) {
+      const file = path.join(directory, relative);
+      try {
+        if (!(await lstat(file)).isFile()) continue;
+        const data = await readTimeline(file, session.id, offset, limit);
+        if (data) return data;
+      } catch { /* Rotated or temporarily unavailable journals do not block session details. */ }
+    }
   }
   return null;
 }

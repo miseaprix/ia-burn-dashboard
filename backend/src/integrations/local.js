@@ -24,6 +24,7 @@ const codexFileCache = new ParsedFileCache('codex-v1');
 import path from 'node:path';
 import { claudeCostFromTokens, codexModelCost, findPricing, claudeTokenCosts, codexTokenCosts } from '../domain/pricing.js';
 import { ENTERPRISE_LOCAL, enterpriseDirs } from '../config/enterprise.js';
+import { localLogRoots } from '../config/local-profile-roots.js';
 
 // ---------------------------------------------------------------- filesystem
 
@@ -61,13 +62,6 @@ async function readLines(file) {
   } catch {
     return [];
   }
-}
-
-function splitList(value) {
-  return String(value || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
 }
 
 // ------------------------------------------------------------------- helpers
@@ -222,9 +216,9 @@ function shouldReplace(candidate, existing) {
   return candidate.speed !== undefined && existing.speed === undefined;
 }
 
-async function loadClaudeRows(claudeDir) {
+async function loadClaudeRows(claudeDirs) {
   const roots = [];
-  for (const raw of splitList(claudeDir)) {
+  for (const raw of claudeDirs) {
     let dir = raw;
     if (path.basename(dir) === 'projects' && (await isDir(dir)))
       dir = path.dirname(dir);
@@ -521,10 +515,10 @@ async function readCodexSessionFile(file) {
   return { version: 2, events };
 }
 
-async function loadCodexRows(codexHome) {
+async function loadCodexRows(codexHomes) {
   // Sources: sessions/ and archived_sessions/ of each home; the home itself as a fallback.
   const sources = [];
-  for (const home of splitList(codexHome)) {
+  for (const home of codexHomes) {
     const sessions = path.join(home, 'sessions');
     const archived = path.join(home, 'archived_sessions');
     const hasSessions = await isDir(sessions);
@@ -553,7 +547,7 @@ async function loadCodexRows(codexHome) {
 
   files.push(
     ...codexFileCache
-      .files(splitList(codexHome))
+      .files(codexHomes)
       .filter((f) => !files.includes(f)),
   );
   const seenEvents = new Set();
@@ -648,9 +642,10 @@ async function loadCodexRows(codexHome) {
 }
 
 export async function collectLocal(source = 'local') {
+  const dataset = source === ENTERPRISE_LOCAL ? 'enterprise' : 'personal';
   const [claude, codex] = await Promise.all([
-    loadClaudeRows(source === ENTERPRISE_LOCAL ? enterpriseDirs().claude : (process.env.CLAUDE_CONFIG_DIR || '/data/claude')),
-    loadCodexRows(source === ENTERPRISE_LOCAL ? enterpriseDirs().codex : (process.env.CODEX_HOME || '/data/codex')),
+    loadClaudeRows(localLogRoots('claude', dataset)),
+    loadCodexRows(localLogRoots('codex', dataset)),
   ]);
   const opencode = source === ENTERPRISE_LOCAL ? await loadOpenCodeRows() : [];
   stateStore().saveDaily(historyDataset(source), [...claude, ...codex, ...opencode]);

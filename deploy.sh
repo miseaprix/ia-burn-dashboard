@@ -6,14 +6,18 @@ umask 077
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 build_args=(--build)
 port_override=""
+profiles_file=""
+check_only=false
 usage() {
     cat <<'HELP'
-Usage: ./deploy.sh [--port PORT] [--no-build]
+Usage: ./deploy.sh [--port PORT] [--profiles FILE] [--check] [--no-build]
 
 Builds the local image, detects available personal caches and starts the dashboard.
 Run the same command again to rebuild and redeploy. History volumes are preserved.
 
   --port PORT   Override BURN_PORT for this deployment (default: .env or 4090).
+  --profiles FILE  Use the host collector configuration for read-only log mounts.
+  --check       Validate the Compose configuration without restarting the container.
   --no-build    Reuse the existing local image.
   -h, --help    Show this help.
 
@@ -26,6 +30,10 @@ while [[ $# -gt 0 ]]; do
         --port)
             [[ $# -ge 2 ]] || fail '--port requires a number'
             port_override="$2"; shift 2 ;;
+        --profiles)
+            [[ $# -ge 2 && -f "$2" ]] || fail '--profiles requires an existing collector configuration'
+            profiles_file="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"; shift 2 ;;
+        --check) check_only=true; shift ;;
         --no-build) build_args=(--no-build); shift ;;
         -h|--help) usage; exit 0 ;;
         *) fail "Unknown argument: $1 (see --help)" ;;
@@ -109,6 +117,17 @@ for enterprise_kind in CLAUDE CODEX OPENCODE; do
     export "$enterprise_var=$enterprise_path"
 done
 
+if [[ -n "$profiles_file" ]]; then
+    command -v node >/dev/null 2>&1 || fail '--profiles requires Node.js on the host'
+    mkdir -p .runtime
+    profiles_override="$(mktemp "$PROJECT_DIR/.runtime/profiles.XXXXXX")"
+    trap 'rm -f -- "$profiles_override"' EXIT
+    node "$PROJECT_DIR/scripts/profile-mounts.mjs" "$profiles_file" > "$profiles_override"
+    profiles_arg_index=$(( ${#compose_args[@]} + 1 ))
+    compose_args+=(-f "$profiles_override")
+    printf 'Using shared profile configuration %s\n' "$profiles_file"
+fi
+
 account_path="$(absolute_path "${CLAUDE_ACCOUNT_PATH:-$HOME/.claude.json}")"
 if [[ -f "$account_path" ]]; then
     export CLAUDE_ACCOUNT_PATH="$account_path"
@@ -134,6 +153,15 @@ if [[ -f "$native_path/claude-usage.json" ]]; then
 fi
 
 docker compose "${compose_args[@]}" config --quiet
+if [[ "$check_only" == true ]]; then
+    printf 'Compose configuration validated.\n'
+    exit 0
+fi
+if [[ -n "$profiles_file" ]]; then
+    active_profiles_override="$PROJECT_DIR/.runtime/profiles.compose.json"
+    mv -f -- "$profiles_override" "$active_profiles_override"
+    compose_args[$profiles_arg_index]="$active_profiles_override"
+fi
 printf 'Deploying IA Burn on port %s…\n' "$BURN_PORT"
 docker compose "${compose_args[@]}" up -d "${build_args[@]}" --force-recreate --wait --wait-timeout 60
 printf 'Ready: http://localhost:%s\n' "$BURN_PORT"

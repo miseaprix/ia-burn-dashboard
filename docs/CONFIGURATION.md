@@ -36,6 +36,22 @@ port choice. The script uses the Docker daemon's native architecture. Multi-arch
 export remains a separate build command below. It never sources the corporate shell
 file or `.env`; Compose parses the configuration.
 
+```mermaid
+flowchart TD
+  A["deploy.sh"] --> B{"Option --profiles ?"}
+  B -->|Avec| C["Lire les profils de collector.json"]
+  B -->|Sans| D["Lire .env et les valeurs par défaut"]
+  C --> E["Valider les montages Docker"]
+  D --> E
+  E --> F{"Option --check ?"}
+  F -->|Avec| G["Afficher le résultat de validation"]
+  F -->|Sans| H["Démarrer IA Burn avec son volume d’historique"]
+```
+
+Les montages peuvent être dérivés du fichier du collecteur avec `--profiles`.
+Le guide Monitoring décrit le choix du dossier principal, l’aperçu et le retour
+aux montages historiques. [Profils partagés avec Docker](MONITORING.md#profils-partagés-avec-docker)
+
 Missing Claude/Codex directories use empty read-only mounts under ignored
 `.runtime/`. For the corporate view, enter your API key in **Admin** and set
 `ENTERPRISE_BASE_URL` (or `ANTHROPIC_BASE_URL`); without it the enterprise source is disabled.

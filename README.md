@@ -63,6 +63,13 @@ reste désactivée. La démonstration statique affiche cette même source « Acm
 Les niveaux sont **indépendants et complémentaires** : activez ceux qui vous sont
 utiles. Le niveau 3 peut enrichir aussi bien Perso qu’Enterprise.
 
+```mermaid
+flowchart LR
+  A["API fournisseur"] --> E["1 · Enterprise"]
+  B["Journaux et quotas personnels"] --> P["2 · Perso"]
+  C["Hooks, journaux et captures"] --> M["3 · Monitoring"]
+```
+
 | Niveau | Pages dans Burn | Fonctionnement et configuration |
 | --- | --- | --- |
 | **1 — Enterprise** | Source **Enterprise → Enterprise** ; source **Enterprise local → Overview / harnais** | L’API fournit budget, dépenses, tokens, requêtes et modèles. Enregistrer la **clé API dans Admin**. La vue locale distingue les harnais à partir de leurs journaux, montés en lecture seule. |
@@ -85,7 +92,8 @@ harnais : **elles n’installent pas automatiquement les collecteurs**.
 Le niveau 3 affiche les événements, les compteurs du modèle et le contexte
 observé. Leur disponibilité dépend du harnais et des sources activées. Le guide
 [Configuration du niveau 3 par harnais](docs/MONITORING.md#configuration-du-niveau-3-par-harnais)
-détaille les réglages de Claude Code, Paperclip via Claude Code/ACP, Codex et OpenCode 2.
+détaille les réglages de Claude Code, Codex et OpenCode 2, ainsi que leur
+couverture lorsqu’ils sont lancés par Paperclip.
 
 Voir les guides [configuration](docs/CONFIGURATION.md),
 [collecte Monitoring](docs/MONITORING.md).

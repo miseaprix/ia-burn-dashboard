@@ -52,7 +52,7 @@ export function removeClaudeHooks(settings,dataset,harness='claude') {
   return result;
 }
 
-export function installClaudeMonitor({dataset,settingsFile,url='http://localhost:4095/api/monitor/events',apply=false,remove=false,replace=false,harness='claude'}) {
+export function installClaudeMonitor({dataset,settingsFile,url='http://localhost:4095/api/monitor/events',apply=false,remove=false,replace=false,harness='claude',captureEnv}) {
   if(!eventTypes[harness])throw new Error('Unsupported hook harness');
   if(!['personal','enterprise'].includes(dataset))throw new Error('Use --dataset personal or enterprise');
   const endpoint=new URL(url);
@@ -63,7 +63,18 @@ export function installClaudeMonitor({dataset,settingsFile,url='http://localhost
   const command=[stableNodePath(),script,'--dataset',dataset,'--url',endpoint.href].map(quote).join(' ');
   const present=existsSync(target),original=present ? readFileSync(target,'utf8') : '{}';
   const settings=JSON.parse(original);
-  const result=remove ? removeClaudeHooks(settings,dataset,harness) : addClaudeHooks(replace ? removeClaudeHooks(settings,dataset,harness) : settings,command,harness);
+  let base = settings;
+  if (remove || replace) base = removeClaudeHooks(base, dataset, harness);
+  if (replace && dataset === 'enterprise') base = removeClaudeHooks(base, 'accorgpt', harness);
+  const result = remove ? base : addClaudeHooks(base, command, harness);
+  if (captureEnv) {
+    result.env ??= {};
+    if (typeof result.env !== 'object' || Array.isArray(result.env)) throw new Error('Invalid profile env');
+    for (const [key, value] of Object.entries(captureEnv)) {
+      if (Object.hasOwn(result.env,key) && result.env[key] !== value) throw new Error(`Profile already defines ${key}`);
+      result.env[key] = value;
+    }
+  }
   const contents=JSON.stringify(result,null,2)+'\n';
   const changed=JSON.stringify(JSON.parse(original))!==JSON.stringify(result);
   let backup=null;

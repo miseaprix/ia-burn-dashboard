@@ -1290,10 +1290,36 @@ a {
 .monitor-metadata dt { color: var(--muted); }
 .monitor-metadata dd { margin: 4px 0 0; overflow-wrap: anywhere; }
 .help-page .help-note { padding: 12px 14px; background: #333; border-left: 3px solid #ff9f43; border-radius: 6px; }
-.monitoring-setup { min-width: 0; scroll-margin-top: 65px; }
-.monitoring-setup details { border-top: 1px solid var(--line); padding: 10px 0; }
-.monitoring-setup summary { cursor: pointer; font-weight: 600; }
-.monitoring-setup pre { padding: 10px 12px; overflow-x: auto; border-radius: 8px; background: var(--bg); }
+.monitoring-setup, .monitoring-setup details { min-width: 0; scroll-margin-top: 65px; }
+.monitoring-setup details { border: 1px solid var(--line); border-radius: 8px; margin-top: 8px; padding: 10px 14px; }
+.monitoring-setup summary { cursor: pointer; font-weight: 650; }
+.monitoring-setup h3 { font-size: 15px; margin: 18px 0 8px; }
+.monitoring-setup h4 { font-size: 14px; margin: 0; }
+.monitoring-setup .setup-source { border-inline-start: 3px solid #80caff; border-radius: 5px; background: #22313d; padding: 9px 12px; }
+.monitoring-setup .setup-source > strong { display: block; color: #a3d9ff; }
+.setup-flow { margin: 14px 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; text-align: center; }
+.setup-flow-config, .setup-flow-branches > div { display: grid; gap: 4px; padding: 8px; border-radius: 6px; }
+.setup-flow-config { margin: 8px auto 0; background: #22313d; }
+.setup-flow-branches { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 8px; margin-top: 8px; }
+.setup-flow-branches > div { background: var(--bg); align-content: start; }
+.setup-flow span { color: var(--muted); }
+.setup-flow .setup-flow-arrow { color: #80caff; }
+.monitoring-setup .setup-steps { display: grid; gap: 14px; padding-inline-start: 24px; }
+.monitoring-setup .setup-steps > li { min-width: 0; }
+.monitoring-setup .setup-steps > li::marker { color: #80caff; font-weight: 650; }
+.monitoring-setup .setup-steps p { margin: 6px 0; }
+.monitoring-setup .setup-location > strong:first-child { color: #ffd28a; margin-inline-end: 6px; }
+.monitoring-setup .setup-code { padding: 10px 12px; overflow-x: auto; border-radius: 6px; background: var(--bg); margin: 8px 0; }
+.monitoring-setup .syntax-command, .monitoring-setup .syntax-key { color: #88ccff; }
+.monitoring-setup .syntax-option, .monitoring-setup .syntax-literal { color: #d4b2ff; }
+.monitoring-setup .syntax-path, .monitoring-setup .syntax-string { color: #a0efba; }
+.monitoring-setup .syntax-number { color: #ffd28a; }
+.monitoring-setup .setup-fields { display: grid; gap: 8px; margin: 10px 0; }
+.monitoring-setup .setup-fields dt { color: var(--muted); }
+.monitoring-setup .setup-fields dd { margin: 2px 0 0; color: #88ccff; }
+.monitoring-setup .setup-fields code { color: inherit; }
+.monitoring-setup .setup-retention { display: grid; gap: 8px; padding-inline-start: 20px; line-height: 1.55; }
+.monitoring-setup .setup-check { border-inline-start: 3px solid #a0efba; padding-inline-start: 12px; }
 .help-nav-icon { width: 18px; height: 18px; border: 1px solid #aaa; border-radius: 50%; text-align: center; line-height: 16px; }
 .help-back { border: 1px solid #444; background: #333; color: #eee; border-radius: 8px; padding: 8px 12px; cursor: pointer; }
 @media (max-width: 650px) { .help-page th, .help-page td { padding: 8px; } .help-back { font-size: 11px; } }
