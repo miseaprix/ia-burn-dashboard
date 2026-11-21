@@ -174,31 +174,31 @@ function buildTree(data) {
   const codexOk = !!codex.burndown;
 
   return {
-    id: 'dashboard', label: 'Dashboard', sub: 'Serveur Node.js',
-    status: 'ok', detail: 'localhost:4095',
+    id: 'dashboard', label: 'Dashboard', sub: 'Serveur · localhost:4095',
+    status: 'ok', detail: 'Fastify + React',
     children: [
       {
         id: 'quota-collector', label: 'Quota collector',
-        sub: `Timer interne · ${Math.round((personal.intervalMs || 60000) / 1000)}s`,
+        sub: `Timer · cycle ${Math.round((personal.intervalMs || 60000) / 1000)}s`,
         status: nodeStatus(!personal.error && !!personal.lastSuccess, true),
         detail: personal.error || (personal.lastSuccess ? `${ago(personal.lastSuccess)} ago` : 'waiting'),
         children: [
           {
             id: 'claude-api', label: 'Claude API',
-            sub: `API REST · ${claudeOk ? claude.burndown.source : 'OAuth'}`,
+            sub: 'API · api.anthropic.com/oauth/usage',
             status: nodeStatus(claudeOk, claude.burndown?.fresh),
             detail: claudeOk ? `${ago(Date.parse(claude.burndown.observedAt))} ago` : 'token expired',
             children: [
               {
                 id: 'claude-session', label: '5h session',
-                sub: 'api.anthropic.com/usage',
+                sub: 'API · quota window < 24h',
                 status: nodeStatus(claude.burndown?.hasSession, true),
                 detail: claude.burndown?.hasSession ? 'active' : 'idle',
                 children: [],
               },
               {
                 id: 'claude-weekly', label: 'Weekly',
-                sub: 'api.anthropic.com/usage',
+                sub: 'API · quota window ≥ 48h',
                 status: nodeStatus(claude.burndown?.hasWeekly, true),
                 detail: claude.burndown?.hasWeekly ? 'active' : 'no data',
                 children: [],
@@ -207,20 +207,20 @@ function buildTree(data) {
           },
           {
             id: 'codex-api', label: 'Codex API',
-            sub: `API REST · ${codexOk ? codex.burndown.source : 'OAuth'}`,
+            sub: 'API · chatgpt.com/wham/usage',
             status: nodeStatus(codexOk, codex.burndown?.fresh),
             detail: codexOk ? `${ago(Date.parse(codex.burndown.observedAt))} ago` : 'no token',
             children: [
               {
                 id: 'codex-session', label: '5h session',
-                sub: 'chatgpt.com/wham/usage',
+                sub: 'API · quota window < 24h',
                 status: nodeStatus(codex.burndown?.hasSession, true),
                 detail: codex.burndown?.hasSession ? 'active' : 'idle',
                 children: [],
               },
               {
                 id: 'codex-weekly', label: 'Weekly',
-                sub: 'chatgpt.com/wham/usage',
+                sub: 'API · quota window ≥ 48h',
                 status: nodeStatus(codex.burndown?.hasWeekly, true),
                 detail: codex.burndown?.hasWeekly ? 'active' : 'no data',
                 children: [],
@@ -231,51 +231,51 @@ function buildTree(data) {
       },
       {
         id: 'usage-collector', label: 'Usage collector',
-        sub: `Timer interne · ${Math.round((local.intervalMs || 60000) / 1000)}s`,
+        sub: `Timer · cycle ${Math.round((local.intervalMs || 60000) / 1000)}s`,
         status: nodeStatus(!local.error && !!local.lastSuccess, true),
         detail: local.error || (local.lastSuccess ? `${ago(local.lastSuccess)} ago` : 'waiting'),
         children: [
           {
             id: 'claude-logs', label: 'Claude logs',
-            sub: 'Fichiers JSONL',
+            sub: 'Fichier · ~/.claude/projects/**/*.jsonl',
             status: 'ok',
-            detail: '/data/claude/projects/',
+            detail: 'JSONL sessions',
             children: [],
           },
           {
             id: 'codex-logs', label: 'Codex logs',
-            sub: 'Fichiers JSONL',
+            sub: 'Fichier · ~/.codex/sessions/**/*.jsonl',
             status: 'ok',
-            detail: '/data/codex/sessions/',
+            detail: 'JSONL sessions',
             children: [],
           },
         ],
       },
       {
         id: 'agent-burn', label: 'Agent Burn',
-        sub: 'App native macOS',
+        sub: 'App · launchd macOS (60s)',
         status: 'ok',
-        detail: 'launchd · 60s cycle',
+        detail: 'native quota cache',
         children: [
           {
             id: 'archive', label: 'quota-archive',
-            sub: 'Fichier JSON',
+            sub: 'Fichier · quota-archive.json',
             status: 'ok',
-            detail: '/data/agent-burn-history/',
+            detail: '~/Library/Application Support/Agent Burn/',
             children: [],
           },
           {
             id: 'cache', label: 'claude-usage',
-            sub: 'Fichier JSON',
+            sub: 'Fichier · claude-usage.json',
             status: 'ok',
-            detail: '/data/agent-burn-cache/',
+            detail: '~/Library/Caches/agent-burn/',
             children: [],
           },
           {
             id: 'account', label: 'claude-account',
-            sub: 'Fichier JSON',
+            sub: 'Fichier · ~/.claude.json',
             status: claudeOk ? 'ok' : 'down',
-            detail: '/data/claude-account.json',
+            detail: claudeOk ? 'account info' : 'manquant',
             children: [],
           },
         ],
@@ -285,7 +285,7 @@ function buildTree(data) {
 }
 
 // Recursive layout: returns flat node list with x,y coordinates
-const NODE_W = 130, NODE_H = 52, H_GAP = 36, V_GAP = 26;
+const NODE_W = 200, NODE_H = 44, H_GAP = 36, V_GAP = 22;
 
 function layoutTree(root) {
   const nodes = [];
@@ -546,14 +546,13 @@ function TreeDiagram({ data, selected, onSelect }) {
                 strokeWidth={active ? 2 : 1}
                 strokeOpacity={active ? 1 : 0.5}
               />
-              <circle cx={node.x + 14} cy={node.y + 15} r="4" fill={color}>
+              <circle cx={node.x + 12} cy={node.y + 14} r="4" fill={color}>
                 {node.status === 'ok' && (
                   <animate attributeName="opacity" values="1;0.4;1" dur="3s" repeatCount="indefinite" />
                 )}
               </circle>
-              <text x={node.x + 24} y={node.y + 18} className="tree-label">{node.label}</text>
-              <text x={node.x + 14} y={node.y + 34} className="tree-sub">{node.sub}</text>
-              <text x={node.x + NODE_W - 8} y={node.y + 34} className="tree-detail" textAnchor="end">{node.detail}</text>
+              <text x={node.x + 22} y={node.y + 17} className="tree-label">{node.label}</text>
+              <text x={node.x + 10} y={node.y + 33} className="tree-sub">{node.sub}</text>
             </g>
           );
         })}
