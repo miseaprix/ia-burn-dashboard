@@ -379,6 +379,8 @@ function TreeDiagram({ data, selected, onSelect }) {
   const [dragging, setDragging] = useState(false);
   const dragStart = useRef(null);
   const [hovered, setHovered] = useState(null);
+  const [nodePositions, setNodePositions] = useState({});
+  const nodeDrag = useRef(null);
 
   useEffect(() => {
     const id = setInterval(() => {}, 2000);
@@ -425,10 +427,29 @@ function TreeDiagram({ data, selected, onSelect }) {
 
   const onMouseDown = useCallback((e) => {
     if (e.button !== 0) return;
+    if (nodeDrag.current) return;
     dragStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y, moved: false };
   }, [pan]);
 
   const onMouseMove = useCallback((e) => {
+    if (nodeDrag.current) {
+      const dx = (e.clientX - nodeDrag.current.startX) / zoom;
+      const dy = (e.clientY - nodeDrag.current.startY) / zoom;
+      if (!nodeDrag.current.moved && Math.abs(dx) + Math.abs(dy) > 3) {
+        nodeDrag.current.moved = true;
+        setDragging(true);
+      }
+      if (nodeDrag.current.moved) {
+        setNodePositions(prev => ({
+          ...prev,
+          [nodeDrag.current.nodeId]: {
+            x: nodeDrag.current.origX + dx,
+            y: nodeDrag.current.origY + dy,
+          },
+        }));
+      }
+      return;
+    }
     if (!dragStart.current) return;
     const dx = e.clientX - dragStart.current.x;
     const dy = e.clientY - dragStart.current.y;
@@ -439,11 +460,12 @@ function TreeDiagram({ data, selected, onSelect }) {
     if (dragStart.current.moved) {
       setPan({ x: dragStart.current.panX + dx, y: dragStart.current.panY + dy });
     }
-  }, []);
+  }, [zoom]);
 
   const onMouseUp = useCallback(() => {
     setDragging(false);
     dragStart.current = null;
+    nodeDrag.current = null;
   }, []);
 
   const zoomIn = () => setZoom(z => Math.min(z * 1.25, 3));
@@ -462,11 +484,16 @@ function TreeDiagram({ data, selected, onSelect }) {
     });
   };
 
+  function getNodePos(node) {
+    return nodePositions[node.id] || { x: node.x, y: node.y };
+  }
+
   function edgePath(from, to) {
-    const x1 = to.x + NODE_W;
-    const y1 = to.y + NODE_H / 2;
-    const x2 = from.x;
-    const y2 = from.y + NODE_H / 2;
+    const fp = getNodePos(from), tp = getNodePos(to);
+    const x1 = tp.x + NODE_W;
+    const y1 = tp.y + NODE_H / 2;
+    const x2 = fp.x;
+    const y2 = fp.y + NODE_H / 2;
     const mx = (x1 + x2) / 2;
     return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
   }
@@ -533,26 +560,43 @@ function TreeDiagram({ data, selected, onSelect }) {
         {nodes.map(node => {
           const color = STATUS_COLORS[node.status] || STATUS_COLORS.ok;
           const active = hovered === node.id || selected === node.id;
+          const pos = getNodePos(node);
+          const isDraggingThis = nodeDrag.current?.nodeId === node.id;
           return (
             <g key={node.id}
               onMouseEnter={() => setHovered(node.id)}
               onMouseLeave={() => setHovered(null)}
-              onClick={(e) => { e.stopPropagation(); if (!dragStart.current?.moved) onSelect(node); }}
-              style={{ cursor: 'pointer' }}>
-              <rect x={node.x} y={node.y} width={NODE_W} height={NODE_H}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                if (e.button !== 0) return;
+                nodeDrag.current = {
+                  nodeId: node.id,
+                  startX: e.clientX,
+                  startY: e.clientY,
+                  origX: pos.x,
+                  origY: pos.y,
+                  moved: false,
+                };
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!nodeDrag.current?.moved && !dragStart.current?.moved) onSelect(node);
+              }}
+              style={{ cursor: isDraggingThis ? 'grabbing' : 'grab' }}>
+              <rect x={pos.x} y={pos.y} width={NODE_W} height={NODE_H}
                 rx="10" ry="10"
                 fill="var(--surface, #1a1a1a)"
                 stroke={color}
                 strokeWidth={active ? 2 : 1}
                 strokeOpacity={active ? 1 : 0.5}
               />
-              <circle cx={node.x + 12} cy={node.y + 14} r="4" fill={color}>
+              <circle cx={pos.x + 12} cy={pos.y + 14} r="4" fill={color}>
                 {node.status === 'ok' && (
                   <animate attributeName="opacity" values="1;0.4;1" dur="3s" repeatCount="indefinite" />
                 )}
               </circle>
-              <text x={node.x + 22} y={node.y + 17} className="tree-label">{node.label}</text>
-              <text x={node.x + 10} y={node.y + 33} className="tree-sub">{node.sub}</text>
+              <text x={pos.x + 22} y={pos.y + 17} className="tree-label">{node.label}</text>
+              <text x={pos.x + 10} y={pos.y + 33} className="tree-sub">{node.sub}</text>
             </g>
           );
         })}
