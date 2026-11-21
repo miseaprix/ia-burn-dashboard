@@ -142,17 +142,19 @@ function buildTree(data) {
 
   return {
     id: 'dashboard', label: 'Dashboard', sub: 'Serveur · localhost:4095',
-    status: 'ok', detail: 'Fastify + React',
+    type: 'affichage', status: 'ok', detail: 'Fastify + React',
     children: [
       {
         id: 'quota-collector', label: 'Quota collector',
         sub: `Timer · cycle ${Math.round((personal.intervalMs || 60000) / 1000)}s`,
+        type: 'traitement',
         status: nodeStatus(!personal.error && !!personal.lastSuccess, true),
         detail: personal.error || (personal.lastSuccess ? `${ago(personal.lastSuccess)} ago` : 'waiting'),
         children: [
           {
             id: 'claude-api', label: 'Claude API',
             sub: 'API · api.anthropic.com/oauth/usage',
+            type: 'source',
             status: nodeStatus(claudeOk, claude.burndown?.fresh),
             detail: claudeOk ? `${ago(Date.parse(claude.burndown.observedAt))} ago` : 'token expired',
             children: [],
@@ -160,6 +162,7 @@ function buildTree(data) {
           {
             id: 'codex-api', label: 'Codex API',
             sub: 'API · chatgpt.com/wham/usage',
+            type: 'source',
             status: nodeStatus(codexOk, codex.burndown?.fresh),
             detail: codexOk ? `${ago(Date.parse(codex.burndown.observedAt))} ago` : 'no token',
             children: [],
@@ -169,21 +172,20 @@ function buildTree(data) {
       {
         id: 'usage-collector', label: 'Usage collector',
         sub: `Timer · cycle ${Math.round((local.intervalMs || 60000) / 1000)}s`,
+        type: 'traitement',
         status: nodeStatus(!local.error && !!local.lastSuccess, true),
         detail: local.error || (local.lastSuccess ? `${ago(local.lastSuccess)} ago` : 'waiting'),
         children: [
           {
             id: 'claude-logs', label: 'Claude logs',
             sub: 'Fichier · ~/.claude/projects/**/*.jsonl',
-            status: 'ok',
-            detail: 'JSONL sessions',
+            type: 'source', status: 'ok', detail: 'JSONL sessions',
             children: [],
           },
           {
             id: 'codex-logs', label: 'Codex logs',
             sub: 'Fichier · ~/.codex/sessions/**/*.jsonl',
-            status: 'ok',
-            detail: 'JSONL sessions',
+            type: 'source', status: 'ok', detail: 'JSONL sessions',
             children: [],
           },
         ],
@@ -191,26 +193,26 @@ function buildTree(data) {
       {
         id: 'agent-burn', label: 'Agent Burn',
         sub: 'App · launchd macOS (60s)',
-        status: 'ok',
-        detail: 'native quota cache',
+        type: 'traitement', status: 'ok', detail: 'native quota cache',
         children: [
           {
             id: 'archive', label: 'quota-archive',
             sub: 'Fichier · quota-archive.json',
-            status: 'ok',
+            type: 'source', status: 'ok',
             detail: '~/Library/Application Support/Agent Burn/',
             children: [],
           },
           {
             id: 'cache', label: 'claude-usage',
             sub: 'Fichier · claude-usage.json',
-            status: 'ok',
+            type: 'source', status: 'ok',
             detail: '~/Library/Caches/agent-burn/',
             children: [],
           },
           {
             id: 'account', label: 'claude-account',
             sub: 'Fichier · ~/.claude.json',
+            type: 'source',
             status: claudeOk ? 'ok' : 'down',
             detail: claudeOk ? 'account info' : 'manquant',
             children: [],
@@ -262,6 +264,12 @@ const STATUS_COLORS = {
   ok: '#22c55e',
   stale: '#f59e0b',
   down: '#ef4444',
+};
+
+const TYPE_COLORS = {
+  source: { border: '#60a5fa', bg: 'rgba(96,165,250,0.08)' },
+  traitement: { border: '#a78bfa', bg: 'rgba(167,139,250,0.08)' },
+  affichage: { border: '#f59e0b', bg: 'rgba(245,158,11,0.08)' },
 };
 
 function NodeDetail({ node, onClose }) {
@@ -476,7 +484,7 @@ function TreeDiagram({ data, selected, onSelect }) {
           const fn = nodeMap[from], tn = nodeMap[to];
           if (!fn || !tn) return null;
           const sourceNode = tn;
-          const color = STATUS_COLORS[sourceNode.status] || STATUS_COLORS.ok;
+          const color = TYPE_COLORS[sourceNode.type]?.border || TYPE_COLORS.source.border;
           const d = edgePath(fn, tn);
           const isDown = sourceNode.status === 'down';
           return (
@@ -496,7 +504,8 @@ function TreeDiagram({ data, selected, onSelect }) {
         })}
 
         {nodes.map(node => {
-          const color = STATUS_COLORS[node.status] || STATUS_COLORS.ok;
+          const statusColor = STATUS_COLORS[node.status] || STATUS_COLORS.ok;
+          const tc = TYPE_COLORS[node.type] || TYPE_COLORS.source;
           const active = hovered === node.id || selected === node.id;
           const pos = getNodePos(node);
           const isDraggingThis = nodeDrag.current?.nodeId === node.id;
@@ -523,12 +532,12 @@ function TreeDiagram({ data, selected, onSelect }) {
               style={{ cursor: isDraggingThis ? 'grabbing' : 'grab' }}>
               <rect x={pos.x} y={pos.y} width={NODE_W} height={NODE_H}
                 rx="10" ry="10"
-                fill="var(--surface, #1a1a1a)"
-                stroke={color}
+                fill={tc.bg}
+                stroke={tc.border}
                 strokeWidth={active ? 2 : 1}
-                strokeOpacity={active ? 1 : 0.5}
+                strokeOpacity={active ? 1 : 0.4}
               />
-              <circle cx={pos.x + 12} cy={pos.y + 14} r="4" fill={color}>
+              <circle cx={pos.x + 12} cy={pos.y + 14} r="4" fill={statusColor}>
                 {node.status === 'ok' && (
                   <animate attributeName="opacity" values="1;0.4;1" dur="3s" repeatCount="indefinite" />
                 )}
@@ -587,8 +596,12 @@ export default function SourcesPage() {
           </p>
         </div>
         <div className="sources-legend">
-          <span><i className="legend-dot" style={{ background: '#22c55e' }} /> OK</span>
-          <span><i className="legend-dot" style={{ background: '#f59e0b' }} /> Stale</span>
+          <span><i className="legend-dot" style={{ background: '#60a5fa' }} /> Source</span>
+          <span><i className="legend-dot" style={{ background: '#a78bfa' }} /> Traitement</span>
+          <span><i className="legend-dot" style={{ background: '#f59e0b' }} /> Affichage</span>
+          <span style={{ marginLeft: 8, borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: 8 }}>
+            <i className="legend-dot" style={{ background: '#22c55e' }} /> OK
+          </span>
           <span><i className="legend-dot" style={{ background: '#ef4444' }} /> Down</span>
           {lastRefresh && <span className="legend-refresh">Refresh {ago(lastRefresh)} ago</span>}
         </div>
