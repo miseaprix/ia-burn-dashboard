@@ -140,117 +140,107 @@ function buildTree(data) {
   const claudeOk = !!claude.burndown;
   const codexOk = !!codex.burndown;
 
-  return {
-    id: 'dashboard', label: 'Dashboard', sub: 'Serveur · localhost:4095',
-    type: 'traitement', status: 'ok', detail: 'Fastify + React',
+  const quotaCollector = {
+    id: 'quota-collector', label: 'Quota collector',
+    sub: `Timer · cycle ${Math.round((personal.intervalMs || 60000) / 1000)}s`,
+    type: 'traitement',
+    status: nodeStatus(!personal.error && !!personal.lastSuccess, true),
+    detail: personal.error || (personal.lastSuccess ? `${ago(personal.lastSuccess)} ago` : 'waiting'),
     children: [
       {
-        id: 'view-overview', label: 'Overview',
-        sub: 'Vue · depenses, modeles, stats',
-        type: 'affichage', status: 'ok', detail: 'Page principale',
+        id: 'claude-api', label: 'Claude API',
+        sub: 'API · api.anthropic.com/oauth/usage',
+        type: 'source',
+        status: nodeStatus(claudeOk, claude.burndown?.fresh),
+        detail: claudeOk ? `${ago(Date.parse(claude.burndown.observedAt))} ago` : 'token expired',
         children: [],
       },
       {
-        id: 'view-burndown', label: 'Burndown',
-        sub: 'Vue · 5h session, weekly, budget',
-        type: 'affichage', status: 'ok', detail: 'Graphiques de consommation',
+        id: 'codex-api', label: 'Codex API',
+        sub: 'API · chatgpt.com/wham/usage',
+        type: 'source',
+        status: nodeStatus(codexOk, codex.burndown?.fresh),
+        detail: codexOk ? `${ago(Date.parse(codex.burndown.observedAt))} ago` : 'no token',
         children: [],
-      },
-      {
-        id: 'view-monitoring', label: 'Monitoring',
-        sub: 'Vue · sessions actives',
-        type: 'affichage', status: 'ok', detail: 'Suivi temps reel',
-        children: [],
-      },
-      {
-        id: 'view-sources', label: 'Sources',
-        sub: 'Vue · pipeline de collecte',
-        type: 'affichage', status: 'ok', detail: 'Cette page',
-        children: [],
-      },
-      {
-        id: 'quota-collector', label: 'Quota collector',
-        sub: `Timer · cycle ${Math.round((personal.intervalMs || 60000) / 1000)}s`,
-        type: 'traitement',
-        status: nodeStatus(!personal.error && !!personal.lastSuccess, true),
-        detail: personal.error || (personal.lastSuccess ? `${ago(personal.lastSuccess)} ago` : 'waiting'),
-        children: [
-          {
-            id: 'claude-api', label: 'Claude API',
-            sub: 'API · api.anthropic.com/oauth/usage',
-            type: 'source',
-            status: nodeStatus(claudeOk, claude.burndown?.fresh),
-            detail: claudeOk ? `${ago(Date.parse(claude.burndown.observedAt))} ago` : 'token expired',
-            children: [],
-          },
-          {
-            id: 'codex-api', label: 'Codex API',
-            sub: 'API · chatgpt.com/wham/usage',
-            type: 'source',
-            status: nodeStatus(codexOk, codex.burndown?.fresh),
-            detail: codexOk ? `${ago(Date.parse(codex.burndown.observedAt))} ago` : 'no token',
-            children: [],
-          },
-        ],
-      },
-      {
-        id: 'usage-collector', label: 'Usage collector',
-        sub: `Timer · cycle ${Math.round((local.intervalMs || 60000) / 1000)}s`,
-        type: 'traitement',
-        status: nodeStatus(!local.error && !!local.lastSuccess, true),
-        detail: local.error || (local.lastSuccess ? `${ago(local.lastSuccess)} ago` : 'waiting'),
-        children: [
-          {
-            id: 'claude-logs', label: 'Claude logs',
-            sub: 'Fichier · ~/.claude/projects/**/*.jsonl',
-            type: 'source', status: 'ok', detail: 'JSONL sessions',
-            children: [],
-          },
-          {
-            id: 'codex-logs', label: 'Codex logs',
-            sub: 'Fichier · ~/.codex/sessions/**/*.jsonl',
-            type: 'source', status: 'ok', detail: 'JSONL sessions',
-            children: [],
-          },
-        ],
-      },
-      {
-        id: 'agent-burn', label: 'Agent Burn',
-        sub: 'App · launchd macOS (60s)',
-        type: 'traitement', status: 'ok', detail: 'native quota cache',
-        children: [
-          {
-            id: 'archive', label: 'quota-archive',
-            sub: 'Fichier · quota-archive.json',
-            type: 'source', status: 'ok',
-            detail: '~/Library/Application Support/Agent Burn/',
-            children: [],
-          },
-          {
-            id: 'cache', label: 'claude-usage',
-            sub: 'Fichier · claude-usage.json',
-            type: 'source', status: 'ok',
-            detail: '~/Library/Caches/agent-burn/',
-            children: [],
-          },
-          {
-            id: 'account', label: 'claude-account',
-            sub: 'Fichier · ~/.claude.json',
-            type: 'source',
-            status: claudeOk ? 'ok' : 'down',
-            detail: claudeOk ? 'account info' : 'manquant',
-            children: [],
-          },
-        ],
       },
     ],
   };
+
+  const usageCollector = {
+    id: 'usage-collector', label: 'Usage collector',
+    sub: `Timer · cycle ${Math.round((local.intervalMs || 60000) / 1000)}s`,
+    type: 'traitement',
+    status: nodeStatus(!local.error && !!local.lastSuccess, true),
+    detail: local.error || (local.lastSuccess ? `${ago(local.lastSuccess)} ago` : 'waiting'),
+    children: [
+      {
+        id: 'claude-logs', label: 'Claude logs',
+        sub: 'Fichier · ~/.claude/projects/**/*.jsonl',
+        type: 'source', status: 'ok', detail: 'JSONL sessions',
+        children: [],
+      },
+      {
+        id: 'codex-logs', label: 'Codex logs',
+        sub: 'Fichier · ~/.codex/sessions/**/*.jsonl',
+        type: 'source', status: 'ok', detail: 'JSONL sessions',
+        children: [],
+      },
+    ],
+  };
+
+  const agentBurn = {
+    id: 'agent-burn', label: 'Agent Burn',
+    sub: 'App · launchd macOS (60s)',
+    type: 'traitement', status: 'ok', detail: 'native quota cache',
+    children: [
+      {
+        id: 'archive', label: 'quota-archive',
+        sub: 'Fichier · quota-archive.json',
+        type: 'source', status: 'ok',
+        detail: '~/Library/Application Support/Agent Burn/',
+        children: [],
+      },
+      {
+        id: 'cache', label: 'claude-usage',
+        sub: 'Fichier · claude-usage.json',
+        type: 'source', status: 'ok',
+        detail: '~/Library/Caches/agent-burn/',
+        children: [],
+      },
+      {
+        id: 'account', label: 'claude-account',
+        sub: 'Fichier · ~/.claude.json',
+        type: 'source',
+        status: claudeOk ? 'ok' : 'down',
+        detail: claudeOk ? 'account info' : 'manquant',
+        children: [],
+      },
+    ],
+  };
+
+  const views = [
+    { id: 'view-overview', label: 'Overview', sub: 'depenses, modeles, stats', type: 'affichage', status: 'ok', detail: 'Page principale',
+      feeders: ['quota-collector', 'usage-collector', 'agent-burn'] },
+    { id: 'view-burndown', label: 'Burndown', sub: '5h session, weekly, budget', type: 'affichage', status: 'ok', detail: 'Graphiques de consommation',
+      feeders: ['quota-collector'] },
+    { id: 'view-monitoring', label: 'Monitoring', sub: 'sessions actives', type: 'affichage', status: 'ok', detail: 'Suivi temps reel',
+      feeders: ['usage-collector'] },
+    { id: 'view-sources', label: 'Sources', sub: 'pipeline de collecte', type: 'affichage', status: 'ok', detail: 'Cette page',
+      feeders: ['quota-collector', 'usage-collector', 'agent-burn'] },
+  ];
+
+  const tree = {
+    id: 'root', label: '', type: 'hidden', status: 'ok', detail: '', sub: '',
+    children: [quotaCollector, usageCollector, agentBurn],
+  };
+
+  return { tree, views };
 }
 
-// Recursive layout: returns flat node list with x,y coordinates
 const NODE_W = 200, NODE_H = 44, H_GAP = 36, V_GAP = 22;
+const ZONE_PAD = 16;
 
-function layoutTree(root) {
+function layoutPipeline({ tree, views }) {
   const nodes = [];
   const edges = [];
 
@@ -262,8 +252,8 @@ function layoutTree(root) {
   function layout(node, x, yCenter, parentId) {
     node.x = x;
     node.y = yCenter - NODE_H / 2;
-    nodes.push(node);
-    if (parentId) edges.push({ from: parentId, to: node.id });
+    if (node.type !== 'hidden') nodes.push(node);
+    if (parentId && parentId !== 'root') edges.push({ from: parentId, to: node.id });
 
     if (!node.children.length) return;
     const totalH = subtreeHeight(node);
@@ -275,13 +265,42 @@ function layoutTree(root) {
     }
   }
 
-  const totalH = subtreeHeight(root);
-  layout(root, 20, totalH / 2 + 20, null);
-  // Mirror: sources (leaves) on left, dashboard (root) on right
+  const totalH = subtreeHeight(tree);
+  layout(tree, 20, totalH / 2 + 20, null);
+  // Mirror: sources on left, collectors on right
   const maxX = Math.max(...nodes.map(n => n.x + NODE_W));
   const pad = 20;
   for (const n of nodes) n.x = maxX + pad - n.x - NODE_W;
-  return { nodes, edges, width: 0, height: totalH + 40 };
+
+  // Dashboard zone: right of collectors
+  const collectorMaxX = Math.max(...nodes.filter(n => n.type === 'traitement').map(n => n.x + NODE_W));
+  const zoneX = collectorMaxX + H_GAP;
+  const viewsH = views.length * NODE_H + (views.length - 1) * V_GAP;
+  const treeCenter = totalH / 2 + 20;
+  const viewsTop = treeCenter - viewsH / 2;
+
+  views.forEach((v, i) => {
+    v.x = zoneX + ZONE_PAD;
+    v.y = viewsTop + i * (NODE_H + V_GAP);
+    v.children = [];
+    nodes.push(v);
+    for (const fid of v.feeders) {
+      edges.push({ from: fid, to: v.id });
+    }
+  });
+
+  const zone = {
+    x: zoneX,
+    y: viewsTop - ZONE_PAD,
+    w: NODE_W + ZONE_PAD * 2,
+    h: viewsH + ZONE_PAD * 2,
+    label: 'Dashboard',
+    sub: 'localhost:4095',
+  };
+
+  const totalW = zone.x + zone.w + 20;
+  const contentH = Math.max(totalH + 40, zone.y + zone.h + 20);
+  return { nodes, edges, zone, width: totalW, height: contentH };
 }
 
 const STATUS_COLORS = {
@@ -333,14 +352,11 @@ function NodeDetail({ node, onClose }) {
 }
 
 function TreeDiagram({ data, selected, onSelect }) {
-  const tree = buildTree(data);
-  if (!tree) return null;
+  const result = buildTree(data);
+  if (!result) return null;
 
-  const { nodes, edges, height } = layoutTree(tree);
+  const { nodes, edges, zone, width: contentW, height: contentH } = layoutPipeline(result);
   const nodeMap = Object.fromEntries(nodes.map(n => [n.id, n]));
-  const maxX = Math.max(...nodes.map(n => n.x + NODE_W));
-  const contentW = maxX + 40;
-  const contentH = height;
 
   const containerRef = useRef(null);
   const [zoom, setZoom] = useState(1);
@@ -460,10 +476,15 @@ function TreeDiagram({ data, selected, onSelect }) {
 
   function edgePath(from, to) {
     const fp = getNodePos(from), tp = getNodePos(to);
-    const x1 = tp.x + NODE_W;
-    const y1 = tp.y + NODE_H / 2;
-    const x2 = fp.x;
-    const y2 = fp.y + NODE_H / 2;
+    const toIsRight = tp.x > fp.x + NODE_W / 2;
+    let x1, y1, x2, y2;
+    if (toIsRight) {
+      x1 = fp.x + NODE_W; y1 = fp.y + NODE_H / 2;
+      x2 = tp.x; y2 = tp.y + NODE_H / 2;
+    } else {
+      x1 = tp.x + NODE_W; y1 = tp.y + NODE_H / 2;
+      x2 = fp.x; y2 = fp.y + NODE_H / 2;
+    }
     const mx = (x1 + x2) / 2;
     return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
   }
@@ -503,6 +524,16 @@ function TreeDiagram({ data, selected, onSelect }) {
             <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
         </defs>
+
+        {/* Dashboard zone container */}
+        <rect x={zone.x} y={zone.y} width={zone.w} height={zone.h}
+          rx="16" ry="16"
+          fill="rgba(245,158,11,0.04)" stroke={TYPE_COLORS.affichage.border}
+          strokeWidth="1.5" strokeOpacity="0.3" strokeDasharray="6 3" />
+        <text x={zone.x + zone.w / 2} y={zone.y + 11}
+          textAnchor="middle" className="tree-zone-label">
+          {zone.label}
+        </text>
 
         {edges.map(({ from, to }) => {
           const fn = nodeMap[from], tn = nodeMap[to];

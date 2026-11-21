@@ -1660,6 +1660,7 @@ select:disabled { opacity: .55; cursor: default; }
 .tree-label { font-size: 11px; fill: var(--text, #e5e5e5); font-weight: 600; }
 .tree-sub { font-size: 9px; fill: var(--muted, #888); }
 .tree-detail { font-size: 9px; fill: var(--muted, #888); opacity: .7; }
+.tree-zone-label { font-size: 10px; fill: #f59e0b; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
 /* Node detail panel */
 .node-detail-panel {
   width: 280px; flex-shrink: 0; background: var(--surface, #1a1a1a);
