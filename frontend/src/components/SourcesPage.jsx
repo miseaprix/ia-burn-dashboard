@@ -45,39 +45,6 @@ const FIX_HINTS = {
       "Le token peut avoir expiré silencieusement — relancez \"codex\" dans un terminal pour le renouveler.",
     ],
   },
-  'claude-session': {
-    down: [
-      "Aucune fenêtre de session 5h détectée.",
-      "Normal si aucune session Claude Code n'est active ou si le quota API ne retourne pas de fenêtre < 1440 min.",
-      "Dès qu'une session Claude Code est en cours, le burndown 5h apparaît automatiquement.",
-    ],
-    stale: [
-      "Session idle — normal si aucune session Claude Code n'est en cours.",
-      "Le burndown 5h disparaît quand la fenêtre de quota expire (après ~5h d'inactivité).",
-    ],
-  },
-  'claude-weekly': {
-    down: [
-      "Pas de données weekly Claude.",
-      "L'API doit retourner une fenêtre ≥ 2880 min dans la réponse quota.",
-      "Si votre abonnement Claude vient d'être activé, le weekly apparaît après la première utilisation.",
-    ],
-    stale: [
-      "Données weekly absentes — le quota n'a peut-être pas encore été consommé cette semaine.",
-    ],
-  },
-  'codex-session': {
-    down: [
-      "Aucune fenêtre de session 5h Codex détectée.",
-      "Normal si aucune session Codex n'est active.",
-      "Lancez \"codex\" dans un terminal pour démarrer une session.",
-    ],
-    stale: ["Session idle — normal si aucune session Codex n'est en cours."],
-  },
-  'codex-weekly': {
-    down: ["Pas de données weekly Codex. Normal si Codex n'a pas été utilisé cette semaine."],
-    stale: ["Données weekly absentes."],
-  },
   'quota-collector': {
     down: [
       "Le collecteur de quotas ne répond pas.",
@@ -188,44 +155,14 @@ function buildTree(data) {
             sub: 'API · api.anthropic.com/oauth/usage',
             status: nodeStatus(claudeOk, claude.burndown?.fresh),
             detail: claudeOk ? `${ago(Date.parse(claude.burndown.observedAt))} ago` : 'token expired',
-            children: [
-              {
-                id: 'claude-session', label: '5h session',
-                sub: 'API · quota window < 24h',
-                status: nodeStatus(claude.burndown?.hasSession, true),
-                detail: claude.burndown?.hasSession ? 'active' : 'idle',
-                children: [],
-              },
-              {
-                id: 'claude-weekly', label: 'Weekly',
-                sub: 'API · quota window ≥ 48h',
-                status: nodeStatus(claude.burndown?.hasWeekly, true),
-                detail: claude.burndown?.hasWeekly ? 'active' : 'no data',
-                children: [],
-              },
-            ],
+            children: [],
           },
           {
             id: 'codex-api', label: 'Codex API',
             sub: 'API · chatgpt.com/wham/usage',
             status: nodeStatus(codexOk, codex.burndown?.fresh),
             detail: codexOk ? `${ago(Date.parse(codex.burndown.observedAt))} ago` : 'no token',
-            children: [
-              {
-                id: 'codex-session', label: '5h session',
-                sub: 'API · quota window < 24h',
-                status: nodeStatus(codex.burndown?.hasSession, true),
-                detail: codex.burndown?.hasSession ? 'active' : 'idle',
-                children: [],
-              },
-              {
-                id: 'codex-weekly', label: 'Weekly',
-                sub: 'API · quota window ≥ 48h',
-                status: nodeStatus(codex.burndown?.hasWeekly, true),
-                detail: codex.burndown?.hasWeekly ? 'active' : 'no data',
-                children: [],
-              },
-            ],
+            children: [],
           },
         ],
       },
