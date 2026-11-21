@@ -1611,7 +1611,7 @@ select:disabled { opacity: .55; cursor: default; }
 @media(max-width:650px) { .cache-controls { grid-template-columns: 1fr; } }
 
 /* Sources page */
-.sources-page { display: flex; flex-direction: column; gap: 12px; }
+.sources-page { display: flex; flex-direction: column; gap: 12px; height: calc(100vh - 120px); }
 .sources-toolbar {
   display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;
   padding: 0 4px;
@@ -1621,10 +1621,10 @@ select:disabled { opacity: .55; cursor: default; }
 .sources-legend span { display: flex; align-items: center; gap: 5px; }
 .legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .legend-refresh { opacity: .6; font-size: 11px; }
-.sources-layout { display: flex; gap: 0; min-height: 500px; }
+.sources-layout { display: flex; gap: 0; flex: 1; min-height: 0; }
 .canvas-container {
   position: relative; overflow: hidden; border-radius: 10px;
-  background: #0d0d0d; flex: 1; min-height: 500px; touch-action: none; user-select: none;
+  background: #0d0d0d; flex: 1; min-height: 0; touch-action: none; user-select: none;
 }
 .canvas-grid { z-index: 0; }
 .canvas-content { z-index: 1; }
