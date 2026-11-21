@@ -470,7 +470,8 @@ function TreeDiagram({ data, selected, onSelect }) {
 
   const zoomIn = () => setZoom(z => Math.min(z * 1.25, 3));
   const zoomOut = () => setZoom(z => Math.max(z * 0.8, 0.2));
-  const fitView = () => {
+  const fitView = (resetPositions = false) => {
+    if (resetPositions) setNodePositions({});
     const el = containerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -606,7 +607,8 @@ function TreeDiagram({ data, selected, onSelect }) {
       <div className="canvas-controls">
         <button onClick={zoomIn} title="Zoom in">+</button>
         <button onClick={zoomOut} title="Zoom out">&minus;</button>
-        <button onClick={fitView} title="Fit to view">&#x26F6;</button>
+        <button onClick={() => fitView(true)} title="Reset layout">&#x21BA;</button>
+        <button onClick={() => fitView()} title="Fit to view">&#x26F6;</button>
       </div>
     </div>
   );
