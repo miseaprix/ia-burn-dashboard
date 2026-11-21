@@ -191,14 +191,14 @@ function buildTree(data) {
             children: [
               {
                 id: 'claude-session', label: '5h session',
-                sub: 'API quota · fenêtre < 24h',
+                sub: 'api.anthropic.com/usage',
                 status: nodeStatus(claude.burndown?.hasSession, true),
                 detail: claude.burndown?.hasSession ? 'active' : 'idle',
                 children: [],
               },
               {
                 id: 'claude-weekly', label: 'Weekly',
-                sub: 'API quota · fenêtre ≥ 48h',
+                sub: 'api.anthropic.com/usage',
                 status: nodeStatus(claude.burndown?.hasWeekly, true),
                 detail: claude.burndown?.hasWeekly ? 'active' : 'no data',
                 children: [],
@@ -213,14 +213,14 @@ function buildTree(data) {
             children: [
               {
                 id: 'codex-session', label: '5h session',
-                sub: 'API quota · fenêtre < 24h',
+                sub: 'chatgpt.com/wham/usage',
                 status: nodeStatus(codex.burndown?.hasSession, true),
                 detail: codex.burndown?.hasSession ? 'active' : 'idle',
                 children: [],
               },
               {
                 id: 'codex-weekly', label: 'Weekly',
-                sub: 'API quota · fenêtre ≥ 48h',
+                sub: 'chatgpt.com/wham/usage',
                 status: nodeStatus(codex.burndown?.hasWeekly, true),
                 detail: codex.burndown?.hasWeekly ? 'active' : 'no data',
                 children: [],
