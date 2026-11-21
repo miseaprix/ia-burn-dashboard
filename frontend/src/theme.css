@@ -1611,7 +1611,12 @@ select:disabled { opacity: .55; cursor: default; }
 @media(max-width:650px) { .cache-controls { grid-template-columns: 1fr; } }
 
 /* Sources page */
-.sources-page { display: flex; flex-direction: column; gap: 12px; height: calc(100vh - 120px); }
+.dashboard-content:has(.sources-page) {
+  max-width: none; padding: 0 12px 0;
+}
+.sources-page {
+  display: flex; flex-direction: column; gap: 12px; height: calc(100vh - 120px);
+}
 .sources-toolbar {
   display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;
   padding: 0 4px;
