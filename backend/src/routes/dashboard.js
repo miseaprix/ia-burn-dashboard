@@ -15,6 +15,45 @@ export async function dashboardRoutes(app, { collector }) {
   app.get('/api/config', async () => ({enterprise: {label: enterpriseLabel(), enabled: !!(await corporateConfig()).baseUrl}}));
   app.get('/api/collection/status', async () => Object.fromEntries(
     ['local', 'personal', ENTERPRISE, ENTERPRISE_LOCAL].map(s => [s, collector.status(s)])));
+  app.get('/api/sources/status', async () => {
+    const personal = stateStore().collection('personal')?.value;
+    const statuses = Object.fromEntries(
+      ['local', 'personal', ENTERPRISE, ENTERPRISE_LOCAL].map(s => [s, collector.status(s)]));
+    return {
+      collectors: statuses,
+      claude: {
+        burndown: personal?.claude?.burndown ? {
+          observedAt: personal.claude.burndown.observedAt,
+          source: personal.claude.burndown.source,
+          fresh: personal.claude.burndown.fresh,
+          stale: personal.claude.burndown.stale,
+          hasSession: !!personal.claude.burndown.session,
+          hasWeekly: !!personal.claude.burndown.weekly,
+        } : null,
+        subscription: personal?.claude?.subscription ?? null,
+      },
+      codex: {
+        burndown: personal?.codex?.burndown ? {
+          observedAt: personal.codex.burndown.observedAt,
+          source: personal.codex.burndown.source,
+          fresh: personal.codex.burndown.fresh,
+          stale: personal.codex.burndown.stale,
+          hasSession: !!personal.codex.burndown.session,
+          hasWeekly: !!personal.codex.burndown.weekly,
+        } : null,
+        subscription: personal?.codex?.subscription ?? null,
+        surfaceStatus: personal?.codex?.surfaceStatus ?? null,
+      },
+      mounts: {
+        claudeConfig: process.env.CLAUDE_CONFIG_DIR || '/data/claude',
+        codexHome: process.env.CODEX_HOME || '/data/codex',
+        stateDir: process.env.STATE_DIR || '/data/state',
+        accountFile: process.env.CLAUDE_ACCOUNT_FILE || '/data/claude-account.json',
+        archiveFile: process.env.AGENT_BURN_HISTORY_FILE || '/data/agent-burn-history/quota-archive.json',
+        cacheFile: process.env.CLAUDE_USAGE_CACHE_FILE || '/data/agent-burn-cache/claude-usage.json',
+      },
+    };
+  });
   app.get('/api/history/yearly', async (request, reply) => {
     try {
       const requested = normalizeSource(request.query.source);

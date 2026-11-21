@@ -6,6 +6,7 @@ import GatewayActivity from './components/GatewayActivity.jsx';
 import ActivationPage from './components/ActivationPage.jsx';
 import MonitoringPage from './components/MonitoringPage.jsx';
 import MonitoringSessionPage from './components/MonitoringSessionPage.jsx';
+import SourcesPage from './components/SourcesPage.jsx';
 import { monitoringListUrl } from './lib/monitoring.js';
 import React, { useEffect, useState } from 'react';
 import useDashboard from './hooks/useDashboard.js';
@@ -48,12 +49,12 @@ export default function App() {
     [selected, setSelected] = useState(()=>{const page=params.get('page');return page && /^[a-z0-9_-]+$/i.test(page) ? page : 'overview';}),
     [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 650);
   const monitoring = selected === 'monitoring' || selected === 'monitor-session';
-  const standalonePage = monitoring || ['admin','help','context'].includes(selected);
+  const standalonePage = monitoring || ['admin','help','context','sources'].includes(selected);
   // Without a gateway URL, enterprise sources are hidden: fall back to the personal source.
   useEffect(()=>{const next=resolveSource(source,enterpriseEnabled);if(next!==source){if(!standalonePage)setSelected('overview');setSource(next);}},[source,enterpriseEnabled,standalonePage]);
   const [integrations,setIntegrations]=useState(null);
   useEffect(()=>{let active=true;apiFetch('/api/integrations').then(r=>r.ok ? r.json() : null).then(x=>{if(active)setIntegrations(x);}).catch(()=>{});return()=>{active=false;};},[selected,source]);
-  // Garder page, source et période dans l'URL : une actualisation reste sur la page active
+  // Garder page, source et période dans l’URL : une actualisation reste sur la page active
   useEffect(()=>{const q=new URLSearchParams(window.location.search);q.set('page',selected);q.set('source',source);q.set('range',range);if(selected!=='monitor-session') for(const key of ['monitorSource','session','eventsOffset','modelOffset'])q.delete(key);window.history.replaceState(null,'',`${window.location.pathname}?${q}${window.location.hash}`);},[selected,source,range]);
   const initialDay = new Date().toLocaleDateString('en-CA');
   const [from, setFrom] = useState(initialDay), [to, setTo] = useState(initialDay);
@@ -135,12 +136,13 @@ export default function App() {
             );
           })}
           <p className="sidebar-section">Métriques étendues</p>
-          <button className={`sidebar-item ${monitoring ? 'active' : ''}`} onClick={()=>setSelected('monitoring')} aria-current={monitoring ? 'page' : undefined}><span className="help-nav-icon" aria-hidden="true">↗</span><strong>Monitoring</strong><span className="integration-nav-level">3</span></button>
+          <button className={`sidebar-item ${monitoring ? 'active' : ''}`} onClick={()=>setSelected('monitoring')} aria-current={monitoring ? 'page' : undefined}><span className="help-nav-icon" aria-hidden="true">{'↗'}</span><strong>Monitoring</strong><span className="integration-nav-level">3</span></button>
+          <button className={`sidebar-item ${selected==='sources' ? 'active' : ''}`} onClick={()=>setSelected('sources')} aria-current={selected==='sources' ? 'page' : undefined}><span className="help-nav-icon" aria-hidden="true">{'⛓'}</span><strong>Sources</strong></button>
         </nav>
         <div className="sidebar-help">
-          <button className={`sidebar-item ${selected==='context' ? 'active':''}`} onClick={()=>setSelected('context')} aria-current={selected==='context' ? 'page':undefined}><span className="help-nav-icon" aria-hidden="true">◫</span><strong>Contexte et coût</strong></button>
+          <button className={`sidebar-item ${selected==='context' ? 'active':''}`} onClick={()=>setSelected('context')} aria-current={selected==='context' ? 'page':undefined}><span className="help-nav-icon" aria-hidden="true">{'◫'}</span><strong>Contexte et coût</strong></button>
           <button className={`sidebar-item ${selected === 'admin' ? 'active' : ''}`} onClick={() => setSelected('admin')} aria-current={selected === 'admin' ? 'page' : undefined}>
-            <span className="help-nav-icon" aria-hidden="true">⚙</span><strong>Admin</strong>
+            <span className="help-nav-icon" aria-hidden="true">{'⚙'}</span><strong>Admin</strong>
           </button>
           <p className="sidebar-section">Documentation</p>
           <button className={`sidebar-item ${selected === 'help' ? 'active' : ''}`}
@@ -152,7 +154,7 @@ export default function App() {
       <div className="workspace">
         {DEMO && <div className="demo-banner" role="region" aria-label="Démonstration">
           <div><strong>Démonstration · consommation fictive</strong><span>Contexte et matrice : références {label} datées. Autres métriques : exemples fictifs. Aucun appel payant ni accès à vos comptes.</span></div>
-          {selected!=='context' && <button type="button" className="activation-secondary" onClick={()=>setSelected('context')}>Simuler le coût du cache →</button>}
+          {selected!=='context' && <button type="button" className="activation-secondary" onClick={()=>setSelected('context')}>Simuler le coût du cache {'→'}</button>}
           <label>Scénario <select aria-label="Niveau de démonstration" value={new URLSearchParams(window.location.search).get('level') || '3'} onChange={e=>{const u=new URL(window.location.href);u.searchParams.set('level',e.target.value);window.location.assign(u.href);}}>
             {enterpriseEnabled && <option value="1">Niveau 1 · {label}</option>}<option value="2">Niveau 2 · Perso</option><option value="3">Niveau 3 · Toutes les fonctionnalités</option>
           </select></label>
@@ -160,11 +162,11 @@ export default function App() {
         {standalonePage ? (
           <header className="header">
             <div className="toolbar-title">
-              <button className="icon-button" aria-label="Toggle sidebar" onClick={() => setSidebarOpen(v => !v)}>☷</button>
-              <div><h1>{selected === 'context' ? 'Contexte et coût' : selected === 'admin' ? 'Admin' : monitoring ? 'Monitoring' : 'Help'}</h1><p>{selected === 'context' ? 'Simulation pédagogique · contexte, cache et effort' : selected === 'admin' ? 'Configuration de l’application' : monitoring ? 'Niveau 3 · Activité et contexte' : 'Sources de données et harnais'}</p></div>
+              <button className="icon-button" aria-label="Toggle sidebar" onClick={() => setSidebarOpen(v => !v)}>{'☷'}</button>
+              <div><h1>{selected === 'context' ? 'Contexte et coût' : selected === 'admin' ? 'Admin' : monitoring ? 'Monitoring' : selected === 'sources' ? 'Sources' : 'Help'}</h1><p>{selected === 'context' ? 'Simulation pédagogique · contexte, cache et effort' : selected === 'admin' ? 'Configuration de l’application' : monitoring ? 'Niveau 3 · Activité et contexte' : selected === 'sources' ? 'Pipeline de collecte et diagnostic' : 'Sources de données et harnais'}</p></div>
             </div>
             {selected==='monitor-session'
-              ? <a className="help-back monitor-back" href={monitoringListUrl()}>← Retour aux sessions</a>
+              ? <a className="help-back monitor-back" href={monitoringListUrl()}>{'←'} Retour aux sessions</a>
               : <button className="help-back" onClick={() => setSelected('overview')}>Retour au dashboard</button>}
           </header>
         ) : <Header
@@ -187,6 +189,7 @@ export default function App() {
           {selected === 'help' && <HelpPage />}
           {selected === 'admin' && <AdminPage integrations={integrations} enterpriseEnabled={enterpriseEnabled} onHelp={()=>setSelected('help')} />}
           {selected==='monitoring' && <MonitoringPage onAdmin={()=>setSelected('admin')} onHelp={()=>setSelected('help')}/>}
+          {selected==='sources' && <SourcesPage />}
           {selected==='monitor-session' && <MonitoringSessionPage/>}
           {activation && !loading && <ActivationPage kind={activation} name={names[selected]} waiting={activation==='personal' && (selected==='overview' ? Object.values(integrations.personal.configured).some(Boolean) : integrations.personal.configured[selected])} onAdmin={()=>setSelected('admin')} onHelp={()=>setSelected('help')}/>}
           {!standalonePage && !activation && error && (

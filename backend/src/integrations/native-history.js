@@ -17,6 +17,7 @@ export function nativeQuotaHistory(archive, source, now = Date.now()) {
   for (const [agent, harness, kind] of [
     ['claude', 'claude', 'weekly'],
     ['claude-session', 'claude', 'session'],
+    ['codex-session', 'codex', 'session'],
     ['codex', 'codex', 'weekly'],
   ]) {
     const rows = [];
@@ -37,9 +38,10 @@ export function nativeQuotaHistory(archive, source, now = Date.now()) {
         w.elapsedPercent > 100
       )
         continue;
+      const isSession = kind === 'session';
       if (
-        (agent === 'claude-session' && w.windowMinutes !== 300) ||
-        (agent !== 'claude-session' && w.windowMinutes < 2880)
+        (isSession && w.windowMinutes !== 300) ||
+        (!isSession && w.windowMinutes < 2880)
       )
         continue;
       const reset = t + (1 - w.elapsedPercent / 100) * w.windowMinutes * 60000;
