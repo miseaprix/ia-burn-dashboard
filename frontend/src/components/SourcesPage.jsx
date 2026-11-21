@@ -166,6 +166,10 @@ function layoutTree(root) {
 
   const totalH = subtreeHeight(root);
   layout(root, 20, totalH / 2 + 20, null);
+  // Mirror: sources (leaves) on left, dashboard (root) on right
+  const maxX = Math.max(...nodes.map(n => n.x + NODE_W));
+  const pad = 20;
+  for (const n of nodes) n.x = maxX + pad - n.x - NODE_W;
   return { nodes, edges, width: 0, height: totalH + 40 };
 }
 
@@ -193,10 +197,12 @@ function TreeDiagram({ data }) {
   }, []);
 
   function edgePath(from, to) {
-    const x1 = from.x + NODE_W;
-    const y1 = from.y + NODE_H / 2;
-    const x2 = to.x;
-    const y2 = to.y + NODE_H / 2;
+    // After mirror: parent (from) is right, child (to) is left
+    // Draw edge from child (left) to parent (right) so particles flow left→right
+    const x1 = to.x + NODE_W;
+    const y1 = to.y + NODE_H / 2;
+    const x2 = from.x;
+    const y2 = from.y + NODE_H / 2;
     const mx = (x1 + x2) / 2;
     return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
   }
@@ -224,9 +230,10 @@ function TreeDiagram({ data }) {
         {edges.map(({ from, to }) => {
           const fn = nodeMap[from], tn = nodeMap[to];
           if (!fn || !tn) return null;
-          const color = STATUS_COLORS[tn.status] || STATUS_COLORS.ok;
+          const sourceNode = tn; // child = data source (left side)
+          const color = STATUS_COLORS[sourceNode.status] || STATUS_COLORS.ok;
           const d = edgePath(fn, tn);
-          const isDown = tn.status === 'down';
+          const isDown = sourceNode.status === 'down';
           return (
             <g key={`${from}-${to}`}>
               <path d={d} fill="none" stroke={color} strokeWidth="2" strokeOpacity="0.25"
@@ -312,7 +319,7 @@ export default function SourcesPage() {
           <div>
             <h2 className="card-title">Pipeline de collecte</h2>
             <p className="sources-subtitle">
-              Flux de données en temps réel — les nœuds rouges signalent une rupture dans la chaîne.
+              Flux de données de gauche à droite — les nœuds rouges signalent une rupture dans la chaîne.
             </p>
           </div>
           <div className="sources-legend">
@@ -327,7 +334,7 @@ export default function SourcesPage() {
 
       <section className="card">
         <h2 className="card-title">Diagnostic rapide</h2>
-        <p className="sources-subtitle">Si une métrique affiche « Unavailable », remontez l’arbre de droite à gauche pour trouver la rupture.</p>
+        <p className="sources-subtitle">Si une métrique affiche « Unavailable », remontez l’arbre de gauche à droite pour trouver la rupture.</p>
         <div className="diagnostic-grid">
           <DiagRow label="Claude token" status={claude.burndown ? 'ok' : 'down'} detail={claude.burndown ? `Source: ${claude.burndown.source}` : 'Token expiré — ré-authentifier dans Claude Code'} />
           <DiagRow label="Claude session 5h" status={claude.burndown?.hasSession ? 'ok' : 'stale'} detail={claude.burndown?.hasSession ? 'Active' : 'Pas de fenêtre active ou idle'} />
