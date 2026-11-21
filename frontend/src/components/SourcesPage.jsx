@@ -17,37 +17,150 @@ function nodeStatus(ok, fresh) {
 
 const FIX_HINTS = {
   'claude-api': {
-    down: 'Le token OAuth Claude a expiré. Lancez une session Claude Code pour régénérer le token automatiquement, ou ré-authentifiez manuellement.',
-    stale: 'Les données Claude sont obsolètes. Vérifiez que le Quota collector tourne et que le token OAuth est valide.',
+    down: [
+      "Le token OAuth Claude a expiré.",
+      "Le token est lu depuis ~/.claude/.credentials.json (monté en lecture seule dans le conteneur à /data/claude/.credentials.json).",
+      "Pour le régénérer : ouvrez un terminal et lancez une session Claude Code (commande \"claude\"). L'authentification OAuth se fait automatiquement et écrit le nouveau token dans ~/.claude/.credentials.json.",
+      "Le conteneur Docker le voit immédiatement (volume bind monté en ro).",
+      "Vérification : docker compose exec ia-burn cat /data/claude/.credentials.json | jq .claudeAiOauth.accessToken",
+    ],
+    stale: [
+      "Les données Claude sont obsolètes (pas de lecture récente).",
+      "Vérifiez que le conteneur tourne : docker compose ps",
+      "Vérifiez les logs du collecteur : docker compose logs -f ia-burn --since 5m",
+      "Si le token est valide mais le quota non-lu, le collecteur réessaiera au prochain cycle (toutes les ~60s).",
+    ],
   },
   'codex-api': {
-    down: 'Pas de token Codex. Lancez une session Codex CLI pour générer le token, ou vérifiez que CODEX_HOME pointe vers le bon répertoire.',
-    stale: 'Les données Codex sont obsolètes. Vérifiez le Quota collector et le token.',
+    down: [
+      "Pas de token Codex (auth.json absent ou invalide).",
+      "Le token est lu depuis ~/.codex/auth.json (monté à /data/codex/auth.json dans le conteneur).",
+      "Pour le générer : ouvrez un terminal et lancez \"codex\". L'authentification crée ~/.codex/auth.json automatiquement.",
+      "Vérification : docker compose exec ia-burn cat /data/codex/auth.json | jq .tokens.access_token",
+      "Si CODEX_DATA_DIR est défini dans votre .env, vérifiez qu'il pointe vers le bon répertoire.",
+    ],
+    stale: [
+      "Les données Codex sont obsolètes.",
+      "Vérifiez les logs : docker compose logs -f ia-burn --since 5m | grep -i codex",
+      "Le token peut avoir expiré silencieusement — relancez \"codex\" dans un terminal pour le renouveler.",
+    ],
   },
   'claude-session': {
-    down: 'Aucune fenêtre de session 5h détectée. Cela arrive quand aucune session Claude n’est active ou que le quota n’a pas de fenêtre < 1440 min.',
-    stale: 'Session idle — normal si aucune session Claude Code n’est en cours.',
+    down: [
+      "Aucune fenêtre de session 5h détectée.",
+      "Normal si aucune session Claude Code n'est active ou si le quota API ne retourne pas de fenêtre < 1440 min.",
+      "Dès qu'une session Claude Code est en cours, le burndown 5h apparaît automatiquement.",
+    ],
+    stale: [
+      "Session idle — normal si aucune session Claude Code n'est en cours.",
+      "Le burndown 5h disparaît quand la fenêtre de quota expire (après ~5h d'inactivité).",
+    ],
   },
   'claude-weekly': {
-    down: 'Pas de données weekly Claude. Vérifiez que l’API retourne bien une fenêtre ≥ 2880 min.',
-    stale: 'Données weekly absentes — le quota n’a peut-être pas encore été consommé cette semaine.',
+    down: [
+      "Pas de données weekly Claude.",
+      "L'API doit retourner une fenêtre ≥ 2880 min dans la réponse quota.",
+      "Si votre abonnement Claude vient d'être activé, le weekly apparaît après la première utilisation.",
+    ],
+    stale: [
+      "Données weekly absentes — le quota n'a peut-être pas encore été consommé cette semaine.",
+    ],
   },
   'codex-session': {
-    down: 'Aucune fenêtre de session 5h Codex. Normal si aucune session Codex n’est active.',
-    stale: 'Session idle.',
+    down: [
+      "Aucune fenêtre de session 5h Codex détectée.",
+      "Normal si aucune session Codex n'est active.",
+      "Lancez \"codex\" dans un terminal pour démarrer une session.",
+    ],
+    stale: ["Session idle — normal si aucune session Codex n'est en cours."],
   },
   'codex-weekly': {
-    down: 'Pas de données weekly Codex.',
-    stale: 'Données weekly absentes.',
+    down: ["Pas de données weekly Codex. Normal si Codex n'a pas été utilisé cette semaine."],
+    stale: ["Données weekly absentes."],
   },
   'quota-collector': {
-    down: 'Le collecteur de quotas ne répond pas. Vérifiez les logs Docker : docker compose logs -f ia-burn',
+    down: [
+      "Le collecteur de quotas ne répond pas.",
+      "Vérifiez que le conteneur tourne : docker compose ps",
+      "Consultez les logs : docker compose logs -f ia-burn --since 5m",
+      "Le collecteur est un timer interne au serveur Node.js — s'il est down, le conteneur est probablement en erreur ou redémarre.",
+      "Redémarrage : docker compose restart ia-burn",
+    ],
   },
   'usage-collector': {
-    down: 'Le collecteur d’usage ne répond pas. Vérifiez que les volumes ~/.claude et ~/.codex sont bien montés.',
+    down: [
+      "Le collecteur d'usage ne répond pas.",
+      "Il lit les logs JSONL directement depuis les volumes montés :",
+      "• Claude : ~/.claude → /data/claude (défini par CLAUDE_DATA_DIR ou ~/.claude par défaut)",
+      "• Codex : ~/.codex → /data/codex (défini par CODEX_DATA_DIR ou ~/.codex par défaut)",
+      "Vérifiez les montages : docker compose exec ia-burn ls -la /data/claude /data/codex",
+    ],
+  },
+  'claude-logs': {
+    ok: [
+      "Logs JSONL des sessions Claude Code.",
+      "Chemin hôte : ~/.claude/projects/*/*.jsonl",
+      "Chemin conteneur : /data/claude/projects/*/*.jsonl",
+      "Le collecteur parse les blocs \"usage\" de chaque message pour extraire les tokens consommés par modèle et par jour.",
+    ],
+  },
+  'codex-logs': {
+    ok: [
+      "Logs JSONL des sessions Codex CLI.",
+      "Chemin hôte : ~/.codex/sessions/*/*.jsonl et ~/.codex/archived_sessions/*/*.jsonl",
+      "Chemin conteneur : /data/codex/sessions/ et /data/codex/archived_sessions/",
+      "Le collecteur lit les événements \"token_count\" des 24 fichiers les plus récents.",
+    ],
+  },
+  'archive': {
+    ok: [
+      "Historique des quotas collecté par l'app native Agent Burn (macOS).",
+      "Chemin hôte : ~/Library/Application Support/Agent Burn/quota-archive.json",
+      "Chemin conteneur : /data/agent-burn-history/quota-archive.json",
+      "Activé via docker-compose.native-cache.yml (compose override).",
+      "Si non activé : ce noeud est ignoré, les quotas viennent directement de l'API.",
+    ],
+  },
+  'cache': {
+    ok: [
+      "Cache de la dernière réponse quota Claude, écrit par l'app native Agent Burn.",
+      "Chemin hôte : ~/Library/Caches/agent-burn/claude-usage.json",
+      "Chemin conteneur : /data/agent-burn-cache/claude-usage.json",
+      "Activé via docker-compose.native-cache.yml.",
+      "Utilisé comme fallback quand le token OAuth est expiré mais le cache est encore frais (< 15 min).",
+    ],
   },
   'account': {
-    down: 'Le fichier claude-account.json est manquant ou obsolète. Il est généré par Agent Burn via le token OAuth.',
+    down: [
+      "Le fichier claude-account.json est manquant ou obsolète.",
+      "Chemin hôte : ~/.claude.json (configurable via CLAUDE_ACCOUNT_PATH dans .env)",
+      "Chemin conteneur : /data/claude-account.json",
+      "Ce fichier est généré par Claude Code lors de l'authentification OAuth. Lancez \"claude\" dans un terminal pour le créer.",
+      "Monté via docker-compose.personal.yml (optionnel, doit être inclus dans votre commande docker compose).",
+      "Vérification : docker compose exec ia-burn cat /data/claude-account.json | jq .oauthAccount.accountUuid",
+    ],
+    ok: [
+      "Informations de compte Claude (tier, plan, UUID).",
+      "Chemin hôte : ~/.claude.json",
+      "Chemin conteneur : /data/claude-account.json",
+      "Monté via docker-compose.personal.yml.",
+    ],
+  },
+  'dashboard': {
+    ok: [
+      "Point d'entrée du dashboard IA Burn.",
+      "Le serveur Node.js (Fastify) sert le frontend React et l'API.",
+      "Port : 8080 interne, exposé sur BURN_PORT (défaut 4090, voir docker-compose.yml).",
+      "Config Docker : docker-compose.yml + overrides optionnels (.personal.yml, .native-cache.yml).",
+    ],
+  },
+  'agent-burn': {
+    ok: [
+      "App native macOS (launchd) qui collecte les quotas toutes les 60s.",
+      "Les données sont stockées dans ~/Library/Application Support/Agent Burn/ et ~/Library/Caches/agent-burn/.",
+      "Pour activer dans Docker : ajoutez -f docker-compose.native-cache.yml à votre commande docker compose.",
+      "Sans cette app, les quotas sont lus directement via les tokens OAuth dans le conteneur.",
+    ],
   },
 };
 
@@ -61,31 +174,31 @@ function buildTree(data) {
   const codexOk = !!codex.burndown;
 
   return {
-    id: 'dashboard', label: 'Dashboard', sub: 'localhost:4095',
-    status: 'ok', detail: 'Rendering',
+    id: 'dashboard', label: 'Dashboard', sub: 'Serveur Node.js',
+    status: 'ok', detail: 'localhost:4095',
     children: [
       {
         id: 'quota-collector', label: 'Quota collector',
-        sub: `${Math.round((personal.intervalMs || 60000) / 1000)}s cycle`,
+        sub: `Timer interne · ${Math.round((personal.intervalMs || 60000) / 1000)}s`,
         status: nodeStatus(!personal.error && !!personal.lastSuccess, true),
         detail: personal.error || (personal.lastSuccess ? `${ago(personal.lastSuccess)} ago` : 'waiting'),
         children: [
           {
             id: 'claude-api', label: 'Claude API',
-            sub: claudeOk ? claude.burndown.source : 'OAuth token',
+            sub: `API REST · ${claudeOk ? claude.burndown.source : 'OAuth'}`,
             status: nodeStatus(claudeOk, claude.burndown?.fresh),
             detail: claudeOk ? `${ago(Date.parse(claude.burndown.observedAt))} ago` : 'token expired',
             children: [
               {
                 id: 'claude-session', label: '5h session',
-                sub: 'Claude',
+                sub: 'API quota · fenêtre < 24h',
                 status: nodeStatus(claude.burndown?.hasSession, true),
                 detail: claude.burndown?.hasSession ? 'active' : 'idle',
                 children: [],
               },
               {
                 id: 'claude-weekly', label: 'Weekly',
-                sub: 'Claude',
+                sub: 'API quota · fenêtre ≥ 48h',
                 status: nodeStatus(claude.burndown?.hasWeekly, true),
                 detail: claude.burndown?.hasWeekly ? 'active' : 'no data',
                 children: [],
@@ -94,20 +207,20 @@ function buildTree(data) {
           },
           {
             id: 'codex-api', label: 'Codex API',
-            sub: codexOk ? codex.burndown.source : 'OAuth token',
+            sub: `API REST · ${codexOk ? codex.burndown.source : 'OAuth'}`,
             status: nodeStatus(codexOk, codex.burndown?.fresh),
             detail: codexOk ? `${ago(Date.parse(codex.burndown.observedAt))} ago` : 'no token',
             children: [
               {
                 id: 'codex-session', label: '5h session',
-                sub: 'Codex',
+                sub: 'API quota · fenêtre < 24h',
                 status: nodeStatus(codex.burndown?.hasSession, true),
                 detail: codex.burndown?.hasSession ? 'active' : 'idle',
                 children: [],
               },
               {
                 id: 'codex-weekly', label: 'Weekly',
-                sub: 'Codex',
+                sub: 'API quota · fenêtre ≥ 48h',
                 status: nodeStatus(codex.burndown?.hasWeekly, true),
                 detail: codex.burndown?.hasWeekly ? 'active' : 'no data',
                 children: [],
@@ -118,51 +231,51 @@ function buildTree(data) {
       },
       {
         id: 'usage-collector', label: 'Usage collector',
-        sub: `${Math.round((local.intervalMs || 60000) / 1000)}s cycle`,
+        sub: `Timer interne · ${Math.round((local.intervalMs || 60000) / 1000)}s`,
         status: nodeStatus(!local.error && !!local.lastSuccess, true),
         detail: local.error || (local.lastSuccess ? `${ago(local.lastSuccess)} ago` : 'waiting'),
         children: [
           {
             id: 'claude-logs', label: 'Claude logs',
-            sub: '~/.claude',
+            sub: 'Fichiers JSONL',
             status: 'ok',
-            detail: 'JSONL sessions',
+            detail: '/data/claude/projects/',
             children: [],
           },
           {
             id: 'codex-logs', label: 'Codex logs',
-            sub: '~/.codex',
+            sub: 'Fichiers JSONL',
             status: 'ok',
-            detail: 'JSONL sessions',
+            detail: '/data/codex/sessions/',
             children: [],
           },
         ],
       },
       {
         id: 'agent-burn', label: 'Agent Burn',
-        sub: 'launchd 60s',
+        sub: 'App native macOS',
         status: 'ok',
-        detail: 'macOS app',
+        detail: 'launchd · 60s cycle',
         children: [
           {
             id: 'archive', label: 'quota-archive',
-            sub: '.json',
+            sub: 'Fichier JSON',
             status: 'ok',
-            detail: 'quota history',
+            detail: '/data/agent-burn-history/',
             children: [],
           },
           {
             id: 'cache', label: 'claude-usage',
-            sub: '.json',
+            sub: 'Fichier JSON',
             status: 'ok',
-            detail: 'cached response',
+            detail: '/data/agent-burn-cache/',
             children: [],
           },
           {
             id: 'account', label: 'claude-account',
-            sub: '.json',
+            sub: 'Fichier JSON',
             status: claudeOk ? 'ok' : 'down',
-            detail: claudeOk ? 'cached quota' : 'stale/missing',
+            detail: '/data/claude-account.json',
             children: [],
           },
         ],
@@ -218,6 +331,8 @@ function NodeDetail({ node, onClose }) {
   if (!node) return null;
   const color = STATUS_COLORS[node.status] || STATUS_COLORS.ok;
   const hint = FIX_HINTS[node.id]?.[node.status];
+  const hintLines = Array.isArray(hint) ? hint : hint ? [hint] : null;
+  const isError = node.status === 'down' || node.status === 'stale';
   return (
     <div className="node-detail-panel">
       <div className="node-detail-header">
@@ -233,14 +348,16 @@ function NodeDetail({ node, onClose }) {
         <dt>Détail</dt>
         <dd>{node.detail}</dd>
       </dl>
-      {hint && (
-        <div className="node-detail-fix">
-          <strong>{node.status === 'down' ? '⚠ Correction' : 'ⓘ Info'}</strong>
-          <p>{hint}</p>
+      {hintLines && (
+        <div className={isError ? 'node-detail-fix' : 'node-detail-info'}>
+          <strong>{isError ? '⚠ Correction' : 'i Détails'}</strong>
+          {hintLines.map((line, i) => (
+            <p key={i} className={/^(docker |codex |claude |Vérification|Redmarrage|Consultez)/.test(line) ? 'hint-cmd' : undefined}>{line}</p>
+          ))}
         </div>
       )}
-      {!hint && node.status === 'ok' && (
-        <div className="node-detail-ok">Ce nœud fonctionne normalement.</div>
+      {!hintLines && node.status === 'ok' && (
+        <div className="node-detail-ok">Ce noeud fonctionne normalement.</div>
       )}
     </div>
   );
@@ -484,7 +601,7 @@ export default function SourcesPage() {
         <div>
           <h2 className="card-title" style={{ margin: 0 }}>Pipeline de collecte</h2>
           <p className="sources-subtitle">
-            Cliquez sur un nœud pour voir le détail. Les nœuds rouges signalent une rupture.
+            Cliquez sur un noeud pour voir le détail. Les noeuds rouges signalent une rupture.
           </p>
         </div>
         <div className="sources-legend">
