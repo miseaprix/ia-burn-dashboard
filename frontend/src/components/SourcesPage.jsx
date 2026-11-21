@@ -15,7 +15,42 @@ function nodeStatus(ok, fresh) {
   return 'ok';
 }
 
-// Tree layout: each node has {id, label, sub, status, detail, children, x, y}
+const FIX_HINTS = {
+  'claude-api': {
+    down: 'Le token OAuth Claude a expiré. Lancez une session Claude Code pour régénérer le token automatiquement, ou ré-authentifiez manuellement.',
+    stale: 'Les données Claude sont obsolètes. Vérifiez que le Quota collector tourne et que le token OAuth est valide.',
+  },
+  'codex-api': {
+    down: 'Pas de token Codex. Lancez une session Codex CLI pour générer le token, ou vérifiez que CODEX_HOME pointe vers le bon répertoire.',
+    stale: 'Les données Codex sont obsolètes. Vérifiez le Quota collector et le token.',
+  },
+  'claude-session': {
+    down: 'Aucune fenêtre de session 5h détectée. Cela arrive quand aucune session Claude n’est active ou que le quota n’a pas de fenêtre < 1440 min.',
+    stale: 'Session idle — normal si aucune session Claude Code n’est en cours.',
+  },
+  'claude-weekly': {
+    down: 'Pas de données weekly Claude. Vérifiez que l’API retourne bien une fenêtre ≥ 2880 min.',
+    stale: 'Données weekly absentes — le quota n’a peut-être pas encore été consommé cette semaine.',
+  },
+  'codex-session': {
+    down: 'Aucune fenêtre de session 5h Codex. Normal si aucune session Codex n’est active.',
+    stale: 'Session idle.',
+  },
+  'codex-weekly': {
+    down: 'Pas de données weekly Codex.',
+    stale: 'Données weekly absentes.',
+  },
+  'quota-collector': {
+    down: 'Le collecteur de quotas ne répond pas. Vérifiez les logs Docker : docker compose logs -f ia-burn',
+  },
+  'usage-collector': {
+    down: 'Le collecteur d’usage ne répond pas. Vérifiez que les volumes ~/.claude et ~/.codex sont bien montés.',
+  },
+  'account': {
+    down: 'Le fichier claude-account.json est manquant ou obsolète. Il est généré par Agent Burn via le token OAuth.',
+  },
+};
+
 function buildTree(data) {
   if (!data) return null;
   const { collectors, claude, codex } = data;
@@ -179,7 +214,39 @@ const STATUS_COLORS = {
   down: '#ef4444',
 };
 
-function TreeDiagram({ data }) {
+function NodeDetail({ node, onClose }) {
+  if (!node) return null;
+  const color = STATUS_COLORS[node.status] || STATUS_COLORS.ok;
+  const hint = FIX_HINTS[node.id]?.[node.status];
+  return (
+    <div className="node-detail-panel">
+      <div className="node-detail-header">
+        <i className="legend-dot" style={{ background: color }} />
+        <strong>{node.label}</strong>
+        <button className="node-detail-close" onClick={onClose}>×</button>
+      </div>
+      <dl className="node-detail-dl">
+        <dt>Statut</dt>
+        <dd style={{ color }}>{node.status === 'ok' ? 'OK' : node.status === 'stale' ? 'Stale' : 'Down'}</dd>
+        <dt>Source</dt>
+        <dd>{node.sub}</dd>
+        <dt>Détail</dt>
+        <dd>{node.detail}</dd>
+      </dl>
+      {hint && (
+        <div className="node-detail-fix">
+          <strong>{node.status === 'down' ? '⚠ Correction' : 'ⓘ Info'}</strong>
+          <p>{hint}</p>
+        </div>
+      )}
+      {!hint && node.status === 'ok' && (
+        <div className="node-detail-ok">Ce nœud fonctionne normalement.</div>
+      )}
+    </div>
+  );
+}
+
+function TreeDiagram({ data, selected, onSelect }) {
   const tree = buildTree(data);
   if (!tree) return null;
 
@@ -239,19 +306,25 @@ function TreeDiagram({ data }) {
     return () => el.removeEventListener('wheel', handleWheel);
   }, [handleWheel]);
 
-  const onPointerDown = useCallback((e) => {
+  const onMouseDown = useCallback((e) => {
     if (e.button !== 0) return;
-    setDragging(true);
-    dragStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
-    e.currentTarget.setPointerCapture(e.pointerId);
+    dragStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y, moved: false };
   }, [pan]);
 
-  const onPointerMove = useCallback((e) => {
-    if (!dragging || !dragStart.current) return;
-    setPan({ x: e.clientX - dragStart.current.x, y: e.clientY - dragStart.current.y });
-  }, [dragging]);
+  const onMouseMove = useCallback((e) => {
+    if (!dragStart.current) return;
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+    if (!dragStart.current.moved && Math.abs(dx) + Math.abs(dy) > 4) {
+      dragStart.current.moved = true;
+      setDragging(true);
+    }
+    if (dragStart.current.moved) {
+      setPan({ x: dragStart.current.panX + dx, y: dragStart.current.panY + dy });
+    }
+  }, []);
 
-  const onPointerUp = useCallback(() => {
+  const onMouseUp = useCallback(() => {
     setDragging(false);
     dragStart.current = null;
   }, []);
@@ -284,9 +357,9 @@ function TreeDiagram({ data }) {
   return (
     <div className="canvas-container"
       ref={containerRef}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
+      onMouseDown={onMouseDown}
+      onMouseMove={onMouseMove}
+      onMouseUp={onMouseUp}
       style={{ cursor: dragging ? 'grabbing' : 'grab' }}>
 
       {/* Dotted grid background */}
@@ -342,12 +415,13 @@ function TreeDiagram({ data }) {
 
         {nodes.map(node => {
           const color = STATUS_COLORS[node.status] || STATUS_COLORS.ok;
-          const active = hovered === node.id;
+          const active = hovered === node.id || selected === node.id;
           return (
             <g key={node.id}
               onMouseEnter={() => setHovered(node.id)}
               onMouseLeave={() => setHovered(null)}
-              style={{ cursor: 'grab' }}>
+              onClick={(e) => { e.stopPropagation(); if (!dragStart.current?.moved) onSelect(node); }}
+              style={{ cursor: 'pointer' }}>
               <rect x={node.x} y={node.y} width={NODE_W} height={NODE_H}
                 rx="10" ry="10"
                 fill="var(--surface, #1a1a1a)"
@@ -382,6 +456,7 @@ export default function SourcesPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(null);
+  const [selectedNode, setSelectedNode] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -403,56 +478,26 @@ export default function SourcesPage() {
   if (loading) return <div className="loading">Loading…</div>;
   if (!data) return <div className="error-banner">Could not load sources status.</div>;
 
-  const { collectors, claude, codex } = data;
-  const personal = collectors.personal;
-  const local = collectors.local;
-
   return (
     <div className="sources-page">
-      <section className="card sources-overview">
-        <div className="sources-header">
-          <div>
-            <h2 className="card-title">Pipeline de collecte</h2>
-            <p className="sources-subtitle">
-              Flux de données de gauche à droite — les nœuds rouges signalent une rupture dans la chaîne.
-            </p>
-          </div>
-          <div className="sources-legend">
-            <span><i className="legend-dot" style={{ background: '#22c55e' }} /> OK</span>
-            <span><i className="legend-dot" style={{ background: '#f59e0b' }} /> Stale</span>
-            <span><i className="legend-dot" style={{ background: '#ef4444' }} /> Down</span>
-            {lastRefresh && <span className="legend-refresh">Refresh {ago(lastRefresh)} ago</span>}
-          </div>
+      <div className="sources-toolbar">
+        <div>
+          <h2 className="card-title" style={{ margin: 0 }}>Pipeline de collecte</h2>
+          <p className="sources-subtitle">
+            Cliquez sur un nœud pour voir le détail. Les nœuds rouges signalent une rupture.
+          </p>
         </div>
-        <TreeDiagram data={data} />
-      </section>
-
-      <section className="card">
-        <h2 className="card-title">Diagnostic rapide</h2>
-        <p className="sources-subtitle">Si une métrique affiche « Unavailable », remontez l’arbre de gauche à droite pour trouver la rupture.</p>
-        <div className="diagnostic-grid">
-          <DiagRow label="Claude token" status={claude.burndown ? 'ok' : 'down'} detail={claude.burndown ? `Source: ${claude.burndown.source}` : 'Token expiré — ré-authentifier dans Claude Code'} />
-          <DiagRow label="Claude session 5h" status={claude.burndown?.hasSession ? 'ok' : 'stale'} detail={claude.burndown?.hasSession ? 'Active' : 'Pas de fenêtre active ou idle'} />
-          <DiagRow label="Claude weekly" status={claude.burndown?.hasWeekly ? 'ok' : 'stale'} detail={claude.burndown?.hasWeekly ? 'Active' : 'Pas de données weekly'} />
-          <DiagRow label="Codex token" status={codex.burndown ? 'ok' : 'down'} detail={codex.burndown ? `Source: ${codex.burndown.source}` : 'Token manquant'} />
-          <DiagRow label="Codex session 5h" status={codex.burndown?.hasSession ? 'ok' : 'stale'} detail={codex.burndown?.hasSession ? 'Active' : 'Pas de fenêtre active'} />
-          <DiagRow label="Codex weekly" status={codex.burndown?.hasWeekly ? 'ok' : 'stale'} detail={codex.burndown?.hasWeekly ? 'Active' : 'Pas de données'} />
-          <DiagRow label="Surface breakdown" status={codex.surfaceStatus && !codex.surfaceStatus.error ? 'ok' : 'stale'} detail={codex.surfaceStatus?.error || (codex.surfaceStatus ? 'Disponible' : 'Non collecté')} />
-          <DiagRow label="Quota collector" status={personal.lastSuccess && !personal.error ? 'ok' : 'down'} detail={personal.error || (personal.lastSuccess ? `Dernière: ${ago(personal.lastSuccess)} ago` : 'Jamais réussi')} />
-          <DiagRow label="Usage collector" status={local.lastSuccess && !local.error ? 'ok' : 'down'} detail={local.error || (local.lastSuccess ? `Dernière: ${ago(local.lastSuccess)} ago` : 'Jamais réussi')} />
+        <div className="sources-legend">
+          <span><i className="legend-dot" style={{ background: '#22c55e' }} /> OK</span>
+          <span><i className="legend-dot" style={{ background: '#f59e0b' }} /> Stale</span>
+          <span><i className="legend-dot" style={{ background: '#ef4444' }} /> Down</span>
+          {lastRefresh && <span className="legend-refresh">Refresh {ago(lastRefresh)} ago</span>}
         </div>
-      </section>
-    </div>
-  );
-}
-
-function DiagRow({ label, status, detail }) {
-  const color = STATUS_COLORS[status] || STATUS_COLORS.ok;
-  return (
-    <div className={`diag-row ${status === 'down' ? 'diag-bad' : status === 'stale' ? 'diag-warn' : ''}`}>
-      <i className="legend-dot" style={{ background: color, flexShrink: 0 }} />
-      <strong>{label}</strong>
-      <span>{detail}</span>
+      </div>
+      <div className="sources-layout">
+        <TreeDiagram data={data} selected={selectedNode?.id} onSelect={setSelectedNode} />
+        {selectedNode && <NodeDetail node={selectedNode} onClose={() => setSelectedNode(null)} />}
+      </div>
     </div>
   );
 }
