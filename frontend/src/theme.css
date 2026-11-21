@@ -1618,8 +1618,23 @@ select:disabled { opacity: .55; cursor: default; }
 .sources-legend span { display: flex; align-items: center; gap: 5px; }
 .legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .legend-refresh { opacity: .6; font-size: 11px; }
-.sources-tree-wrap { overflow-x: auto; padding: 12px 0 4px; }
-.sources-tree-svg { display: block; width: 100%; min-width: 700px; color: var(--muted); overflow: visible; }
+.canvas-container {
+  position: relative; overflow: hidden; border-radius: 10px;
+  background: #0d0d0d; height: 480px; touch-action: none; user-select: none;
+}
+.canvas-grid { z-index: 0; }
+.canvas-content { z-index: 1; }
+.canvas-controls {
+  position: absolute; bottom: 16px; right: 16px; z-index: 2;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.canvas-controls button {
+  width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(30,30,30,0.85); color: #ccc; font-size: 18px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px);
+  transition: background .15s;
+}
+.canvas-controls button:hover { background: rgba(60,60,60,0.9); color: #fff; }
 .tree-label { font-size: 11px; fill: var(--text, #e5e5e5); font-weight: 600; }
 .tree-sub { font-size: 9px; fill: var(--muted, #888); }
 .tree-detail { font-size: 9px; fill: var(--muted, #888); opacity: .7; }

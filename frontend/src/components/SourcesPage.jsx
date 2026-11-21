@@ -186,19 +186,93 @@ function TreeDiagram({ data }) {
   const { nodes, edges, height } = layoutTree(tree);
   const nodeMap = Object.fromEntries(nodes.map(n => [n.id, n]));
   const maxX = Math.max(...nodes.map(n => n.x + NODE_W));
-  const svgW = maxX + 30;
-  const svgH = height;
+  const contentW = maxX + 40;
+  const contentH = height;
 
+  const containerRef = useRef(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const dragStart = useRef(null);
   const [hovered, setHovered] = useState(null);
-  const [tick, setTick] = useState(0);
+
   useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 2000);
+    const id = setInterval(() => {}, 2000);
     return () => clearInterval(id);
   }, []);
 
+  // Fit content on mount
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const scaleX = rect.width / contentW;
+    const scaleY = rect.height / contentH;
+    const fit = Math.min(scaleX, scaleY, 1.2) * 0.9;
+    setZoom(fit);
+    setPan({
+      x: (rect.width - contentW * fit) / 2,
+      y: (rect.height - contentH * fit) / 2,
+    });
+  }, [contentW, contentH]);
+
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    const rect = containerRef.current.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    setZoom(z => {
+      const nz = Math.min(Math.max(z * factor, 0.2), 3);
+      setPan(p => ({
+        x: mx - (mx - p.x) * (nz / z),
+        y: my - (my - p.y) * (nz / z),
+      }));
+      return nz;
+    });
+  }, []);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
+
+  const onPointerDown = useCallback((e) => {
+    if (e.button !== 0) return;
+    setDragging(true);
+    dragStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }, [pan]);
+
+  const onPointerMove = useCallback((e) => {
+    if (!dragging || !dragStart.current) return;
+    setPan({ x: e.clientX - dragStart.current.x, y: e.clientY - dragStart.current.y });
+  }, [dragging]);
+
+  const onPointerUp = useCallback(() => {
+    setDragging(false);
+    dragStart.current = null;
+  }, []);
+
+  const zoomIn = () => setZoom(z => Math.min(z * 1.25, 3));
+  const zoomOut = () => setZoom(z => Math.max(z * 0.8, 0.2));
+  const fitView = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const scaleX = rect.width / contentW;
+    const scaleY = rect.height / contentH;
+    const fit = Math.min(scaleX, scaleY, 1.2) * 0.9;
+    setZoom(fit);
+    setPan({
+      x: (rect.width - contentW * fit) / 2,
+      y: (rect.height - contentH * fit) / 2,
+    });
+  };
+
   function edgePath(from, to) {
-    // After mirror: parent (from) is right, child (to) is left
-    // Draw edge from child (left) to parent (right) so particles flow left→right
     const x1 = to.x + NODE_W;
     const y1 = to.y + NODE_H / 2;
     const x2 = from.x;
@@ -208,29 +282,45 @@ function TreeDiagram({ data }) {
   }
 
   return (
-    <div className="sources-tree-wrap">
-      <svg viewBox={`0 0 ${svgW} ${svgH}`} className="sources-tree-svg" role="img" aria-label="Data pipeline tree">
+    <div className="canvas-container"
+      ref={containerRef}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      style={{ cursor: dragging ? 'grabbing' : 'grab' }}>
+
+      {/* Dotted grid background */}
+      <svg className="canvas-grid" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
         <defs>
-          {Object.entries(STATUS_COLORS).map(([key, color]) => (
-            <linearGradient key={key} id={`flow-${key}`} x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor={color} stopOpacity="0.1" />
-              <stop offset="40%" stopColor={color} stopOpacity="0.7">
-                <animate attributeName="offset" values="0;1;0" dur="3s" repeatCount="indefinite" />
-              </stop>
-              <stop offset="100%" stopColor={color} stopOpacity="0.1" />
-            </linearGradient>
-          ))}
+          <pattern id="grid-dots" width="24" height="24" patternUnits="userSpaceOnUse"
+            x={pan.x % (24 * zoom)} y={pan.y % (24 * zoom)}
+            patternTransform={`scale(${zoom})`}>
+            <circle cx="12" cy="12" r="1" fill="rgba(255,255,255,0.18)" />
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid-dots)" />
+      </svg>
+
+      {/* Tree content */}
+      <svg className="canvas-content"
+        style={{
+          position: 'absolute', top: 0, left: 0,
+          width: contentW, height: contentH,
+          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          transformOrigin: '0 0',
+          overflow: 'visible',
+        }}>
+        <defs>
           <filter id="glow">
             <feGaussianBlur stdDeviation="2" result="blur" />
             <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
         </defs>
 
-        {/* edges */}
         {edges.map(({ from, to }) => {
           const fn = nodeMap[from], tn = nodeMap[to];
           if (!fn || !tn) return null;
-          const sourceNode = tn; // child = data source (left side)
+          const sourceNode = tn;
           const color = STATUS_COLORS[sourceNode.status] || STATUS_COLORS.ok;
           const d = edgePath(fn, tn);
           const isDown = sourceNode.status === 'down';
@@ -250,7 +340,6 @@ function TreeDiagram({ data }) {
           );
         })}
 
-        {/* nodes */}
         {nodes.map(node => {
           const color = STATUS_COLORS[node.status] || STATUS_COLORS.ok;
           const active = hovered === node.id;
@@ -258,7 +347,7 @@ function TreeDiagram({ data }) {
             <g key={node.id}
               onMouseEnter={() => setHovered(node.id)}
               onMouseLeave={() => setHovered(null)}
-              style={{ cursor: 'default' }}>
+              style={{ cursor: 'grab' }}>
               <rect x={node.x} y={node.y} width={NODE_W} height={NODE_H}
                 rx="10" ry="10"
                 fill="var(--surface, #1a1a1a)"
@@ -266,7 +355,6 @@ function TreeDiagram({ data }) {
                 strokeWidth={active ? 2 : 1}
                 strokeOpacity={active ? 1 : 0.5}
               />
-              {/* status indicator */}
               <circle cx={node.x + 14} cy={node.y + 15} r="4" fill={color}>
                 {node.status === 'ok' && (
                   <animate attributeName="opacity" values="1;0.4;1" dur="3s" repeatCount="indefinite" />
@@ -279,6 +367,13 @@ function TreeDiagram({ data }) {
           );
         })}
       </svg>
+
+      {/* Zoom controls */}
+      <div className="canvas-controls">
+        <button onClick={zoomIn} title="Zoom in">+</button>
+        <button onClick={zoomOut} title="Zoom out">&minus;</button>
+        <button onClick={fitView} title="Fit to view">&#x26F6;</button>
+      </div>
     </div>
   );
 }
