@@ -78,6 +78,19 @@ a {
   border-right: 1px solid var(--card-stroke);
   z-index: 20;
 }
+.sidebar-resize {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--sidebar-width) - 3px);
+  width: 6px;
+  cursor: col-resize;
+  z-index: 25;
+}
+.sidebar-resize:hover,
+.sidebar-resize:active {
+  background: rgba(96,165,250,0.3);
+}
 .sidebar-brand {
   display: flex;
   align-items: center;

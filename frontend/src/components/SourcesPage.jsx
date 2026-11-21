@@ -142,8 +142,32 @@ function buildTree(data) {
 
   return {
     id: 'dashboard', label: 'Dashboard', sub: 'Serveur · localhost:4095',
-    type: 'affichage', status: 'ok', detail: 'Fastify + React',
+    type: 'traitement', status: 'ok', detail: 'Fastify + React',
     children: [
+      {
+        id: 'view-overview', label: 'Overview',
+        sub: 'Vue · depenses, modeles, stats',
+        type: 'affichage', status: 'ok', detail: 'Page principale',
+        children: [],
+      },
+      {
+        id: 'view-burndown', label: 'Burndown',
+        sub: 'Vue · 5h session, weekly, budget',
+        type: 'affichage', status: 'ok', detail: 'Graphiques de consommation',
+        children: [],
+      },
+      {
+        id: 'view-monitoring', label: 'Monitoring',
+        sub: 'Vue · sessions actives',
+        type: 'affichage', status: 'ok', detail: 'Suivi temps reel',
+        children: [],
+      },
+      {
+        id: 'view-sources', label: 'Sources',
+        sub: 'Vue · pipeline de collecte',
+        type: 'affichage', status: 'ok', detail: 'Cette page',
+        children: [],
+      },
       {
         id: 'quota-collector', label: 'Quota collector',
         sub: `Timer · cycle ${Math.round((personal.intervalMs || 60000) / 1000)}s`,

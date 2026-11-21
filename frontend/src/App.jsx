@@ -8,7 +8,7 @@ import MonitoringPage from './components/MonitoringPage.jsx';
 import MonitoringSessionPage from './components/MonitoringSessionPage.jsx';
 import SourcesPage from './components/SourcesPage.jsx';
 import { monitoringListUrl } from './lib/monitoring.js';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import useDashboard from './hooks/useDashboard.js';
 import Header from './components/Header.jsx';
 import HelpPage from './components/HelpPage.jsx';
@@ -47,7 +47,22 @@ export default function App() {
   const [source, setSource] = useState(() => ['enterprise','local','enterprise-local'].includes(params.get('source')) ? params.get('source') : (DEMO ? 'enterprise' : 'local')),
     [range, setRange] = useState(() => ranges[params.get('range')] ? params.get('range') : (DEMO ? 'mtd' : 'all')),
     [selected, setSelected] = useState(()=>{const page=params.get('page');return page && /^[a-z0-9_-]+$/i.test(page) ? page : 'overview';}),
-    [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 650);
+    [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 650),
+    [sidebarW, setSidebarW] = useState(230);
+  const resizing = useRef(null);
+  const onResizeStart = useCallback((e) => {
+    e.preventDefault();
+    resizing.current = { startX: e.clientX, startW: sidebarW };
+    const onMove = (ev) => {
+      const w = Math.min(Math.max(resizing.current.startW + ev.clientX - resizing.current.startX, 160), 500);
+      setSidebarW(w);
+    };
+    const onUp = () => { resizing.current = null; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); document.body.style.cursor = ''; document.body.style.userSelect = ''; };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [sidebarW]);
   const monitoring = selected === 'monitoring' || selected === 'monitor-session';
   const standalonePage = monitoring || ['admin','help','context','sources'].includes(selected);
   // Without a gateway URL, enterprise sources are hidden: fall back to the personal source.
@@ -88,7 +103,7 @@ export default function App() {
       : quota(detail, selected);
   return (
     <EnterpriseContext.Provider value={label}>
-    <div className={`app ${sidebarOpen ? '' : 'sidebar-hidden'}`}>
+    <div className={`app ${sidebarOpen ? '' : 'sidebar-hidden'}`} style={sidebarOpen ? { '--sidebar-width': sidebarW + 'px' } : undefined}>
       <aside className="sidebar" aria-label="Dashboard views">
         <div className="sidebar-brand">
           <BrandIcon />
@@ -151,6 +166,7 @@ export default function App() {
           </button>
         </div>
       </aside>
+      {sidebarOpen && <div className="sidebar-resize" onMouseDown={onResizeStart} />}
       <div className="workspace">
         {DEMO && <div className="demo-banner" role="region" aria-label="Démonstration">
           <div><strong>Démonstration · consommation fictive</strong><span>Contexte et matrice : références {label} datées. Autres métriques : exemples fictifs. Aucun appel payant ni accès à vos comptes.</span></div>
