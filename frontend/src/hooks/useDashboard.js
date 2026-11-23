@@ -2,8 +2,8 @@ import {apiFetch} from '../lib/api.js';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { refreshDelay, refreshOnReturn } from '../lib/refresh-policy.js';
 
-export default function useDashboard({source, range, from, to}) {
-  const selection = JSON.stringify([source, range, range === 'custom' ? from : null, range === 'custom' ? to : null]);
+export default function useDashboard({source, range, from, to, profile}) {
+  const selection = JSON.stringify([source, range, range === 'custom' ? from : null, range === 'custom' ? to : null, profile || null]);
   const [state, setState] = useState({selection: null, data: null, error: null, loading: true});
   const refreshRef = useRef(null);
   useEffect(() => {
@@ -24,6 +24,7 @@ export default function useDashboard({source, range, from, to}) {
       try {
         const query = new URLSearchParams({source, range});
         if (range === 'custom') {query.set('from', from); query.set('to', to);}
+        if (profile) query.set('profile', profile);
         const response = await apiFetch(`/api/dashboard?${query}`, {signal: controller.signal});
         const json = await response.json();
         if (!active) return;
@@ -56,7 +57,7 @@ export default function useDashboard({source, range, from, to}) {
       controller?.abort();
       document.removeEventListener('visibilitychange', visibility);
     };
-  }, [selection, source, range, from, to]);
+  }, [selection, source, range, from, to, profile]);
   const refresh = useCallback(() => refreshRef.current?.(), []);
   return {...(state.selection === selection ? state : {data:null,error:null,loading:true}), refresh};
 }

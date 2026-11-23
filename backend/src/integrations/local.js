@@ -24,7 +24,7 @@ const codexFileCache = new ParsedFileCache('codex-v1');
 import path from 'node:path';
 import { claudeCostFromTokens, codexModelCost, findPricing, claudeTokenCosts, codexTokenCosts } from '../domain/pricing.js';
 import { ENTERPRISE_LOCAL, enterpriseDirs } from '../config/enterprise.js';
-import { localLogRoots } from '../config/local-profile-roots.js';
+import { localLogRoots, profileLabel } from '../config/local-profile-roots.js';
 
 // ---------------------------------------------------------------- filesystem
 
@@ -641,13 +641,26 @@ async function loadCodexRows(codexHomes) {
   });
 }
 
+// Live per-profile rows of the last collection, by source. Not stored: history
+// stays per dataset, this only splits what the logs currently hold.
+const profileRows = new Map();
+export function localProfiles(source = 'local') {
+  return profileRows.get(source) ?? [];
+}
+
 export async function collectLocal(source = 'local') {
   const dataset = source === ENTERPRISE_LOCAL ? 'enterprise' : 'personal';
-  const [claude, codex] = await Promise.all([
-    loadClaudeRows(localLogRoots('claude', dataset)),
-    loadCodexRows(localLogRoots('codex', dataset)),
-  ]);
+  const loaders = { claude: loadClaudeRows, codex: loadCodexRows };
+  const roots = { claude: localLogRoots('claude', dataset), codex: localLogRoots('codex', dataset) };
+  const [claude, codex] = await Promise.all([loaders.claude(roots.claude), loaders.codex(roots.codex)]);
   const opencode = source === ENTERPRISE_LOCAL ? await loadOpenCodeRows() : [];
   stateStore().saveDaily(historyDataset(source), [...claude, ...codex, ...opencode]);
+  // One root reuses the combined rows; several are reloaded one by one (parsed files are cached).
+  const profiles = [];
+  for (const [harness, combined] of [['claude', claude], ['codex', codex]])
+    for (const root of roots[harness])
+      profiles.push({ id: root, harness, ...profileLabel(root),
+        rows: roots[harness].length === 1 ? combined : await loaders[harness]([root]) });
+  profileRows.set(source, profiles);
   return { filesImported: true };
 }

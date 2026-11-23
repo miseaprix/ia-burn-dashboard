@@ -7,6 +7,7 @@ import { corporateDataset } from '../config/datasets.js';
 import { stateStore } from '../storage/state-store.js';
 import { corporateConfig } from '../config/corporate-config.js';
 import { ENTERPRISE, ENTERPRISE_LOCAL, enterpriseLabel, normalizeSource } from '../config/enterprise.js';
+import { logRootsStatus } from '../config/local-profile-roots.js';
 
 export async function dashboardRoutes(app, { collector }) {
   app.get('/api/pricing/status', async () => pricingStatus());
@@ -21,6 +22,7 @@ export async function dashboardRoutes(app, { collector }) {
       ['local', 'personal', ENTERPRISE, ENTERPRISE_LOCAL].map(s => [s, collector.status(s)]));
     return {
       collectors: statuses,
+      logRoots: await logRootsStatus(),
       claude: {
         burndown: personal?.claude?.burndown ? {
           observedAt: personal.claude.burndown.observedAt,
@@ -59,26 +61,27 @@ export async function dashboardRoutes(app, { collector }) {
       const requested = normalizeSource(request.query.source);
       return requested === ENTERPRISE
         ? {source: ENTERPRISE, basis: 'observed API daily activity', years: stateStore().yearly(await corporateDataset())}
-        : local.getYearlyHistory(requested === ENTERPRISE_LOCAL ? ENTERPRISE_LOCAL : 'local');
+        : local.getYearlyHistory([ENTERPRISE_LOCAL, 'all'].includes(requested) ? requested : 'local');
     } catch {
       return reply.code(503).send({error: {message: 'Historical database is unavailable'}});
     }
   });
   app.get('/api/dashboard', async (request, reply) => {
     const requested = normalizeSource(request.query.source);
-    const source = [ENTERPRISE, ENTERPRISE_LOCAL].includes(requested) ? requested : 'local';
+    const source = [ENTERPRISE, ENTERPRISE_LOCAL, 'all'].includes(requested) ? requested : 'local';
+    const profile = typeof request.query.profile === 'string' && request.query.profile ? request.query.profile : undefined;
     let period;
     try { period = periodRequest(request.query); }
     catch (error) { return reply.code(400).send({error: {message: error.message}}); }
     try {
-      const result = await (source === ENTERPRISE ? corporate : local).getDashboard({...period, source});
+      const result = await (source === ENTERPRISE ? corporate : local).getDashboard({...period, source, profile});
       const today = rangeToDates('today').end;
       const nextDay = new Date();
       nextDay.setHours(24,0,0,0);
       const includesToday = !result.error && result.requested?.from <= today && result.requested?.to >= today;
       result.refresh = {includesToday, intervalMs: includesToday ? 60000 : null,
         relative: period.range !== 'custom', today, nextBoundary: nextDay.toISOString()};
-      result.collection = {usage: collector.status(source),
+      result.collection = {usage: collector.status(source === 'all' ? 'local' : source),
         ...(source === 'local' ? {quotas: collector.status('personal')} : {})};
       if (!result.error) {
         result.coverage = {observedDays: result.daily.length, firstDay: result.daily[0]?.date ?? null,

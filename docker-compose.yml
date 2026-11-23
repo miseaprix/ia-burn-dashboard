@@ -21,6 +21,8 @@ services:
       ENTERPRISE_CLAUDE_DIR: /data/claude-enterprise
       ENTERPRISE_CODEX_DIR: /data/codex-enterprise
       ENTERPRISE_OPENCODE_DB: /data/opencode/opencode.db
+      # Host paths shown on the Sources page; scripts/profile-mounts.mjs overrides it with --profiles.
+      IA_BURN_PROFILE_LABELS: '{"/data/claude":"${CLAUDE_DATA_DIR:-${HOME}/.claude}","/data/codex":"${CODEX_DATA_DIR:-${HOME}/.codex}","/data/claude-enterprise":"${ENTERPRISE_CLAUDE_DATA_DIR:-${HOME}/.claude-enterprise}","/data/codex-enterprise":"${ENTERPRISE_CODEX_DATA_DIR:-${HOME}/.codex-enterprise}"}'
     volumes:
       - "${CLAUDE_DATA_DIR:-${HOME}/.claude}:/data/claude:ro"
       - "${CODEX_DATA_DIR:-${HOME}/.codex}:/data/codex:ro"

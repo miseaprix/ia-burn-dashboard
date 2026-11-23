@@ -67,6 +67,15 @@ test('corporate local datasets isolate personal usage and include every harness 
     assert.equal(corporate.capabilities.burndown,false);
     assert.match(corporate.footnote,/not the corporate invoice/);
     assert.equal(corporate.byHarness.length,2);
+    const all = await getDashboard({range:'all',source:'all'});
+    assert.equal(all.totals.tokens,302);
+    assert.equal(all.daily[0].byGroup.claude, personal.totals.spend + corporate.harnesses.claude.totals.spend);
+    assert.equal(all.subscriptions.length,0);
+    const claudeProfile = all.profiles.find(p => p.id === process.env.CLAUDE_CONFIG_DIR);
+    assert.deepEqual([claudeProfile.source, claudeProfile.tokens], ['local', 42]);
+    const filtered = await getDashboard({range:'all',source:'all',profile:process.env.ENTERPRISE_CLAUDE_DIR});
+    assert.equal(filtered.totals.tokens,100);
+    assert.ok((await getDashboard({range:'all',profile:'/elsewhere'})).error);
     closeStateStores();
     const reopened = await getDashboard({range:'all',source:'enterprise-local'});
     assert.equal(reopened.totals.tokens,260);

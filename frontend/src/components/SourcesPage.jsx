@@ -57,26 +57,8 @@ const FIX_HINTS = {
   'usage-collector': {
     down: [
       "Le collecteur d'usage ne répond pas.",
-      "Il lit les logs JSONL directement depuis les volumes montés :",
-      "• Claude : ~/.claude → /data/claude (défini par CLAUDE_DATA_DIR ou ~/.claude par défaut)",
-      "• Codex : ~/.codex → /data/codex (défini par CODEX_DATA_DIR ou ~/.codex par défaut)",
-      "Vérifiez les montages : docker compose exec ia-burn ls -la /data/claude /data/codex",
-    ],
-  },
-  'claude-logs': {
-    ok: [
-      "Logs JSONL des sessions Claude Code.",
-      "Chemin hôte : ~/.claude/projects/*/*.jsonl",
-      "Chemin conteneur : /data/claude/projects/*/*.jsonl",
-      "Le collecteur parse les blocs \"usage\" de chaque message pour extraire les tokens consommés par modèle et par jour.",
-    ],
-  },
-  'codex-logs': {
-    ok: [
-      "Logs JSONL des sessions Codex CLI.",
-      "Chemin hôte : ~/.codex/sessions/*/*.jsonl et ~/.codex/archived_sessions/*/*.jsonl",
-      "Chemin conteneur : /data/codex/sessions/ et /data/codex/archived_sessions/",
-      "Le collecteur lit les événements \"token_count\" des 24 fichiers les plus récents.",
+      "Il lit les logs JSONL directement depuis les dossiers montés (un noeud par dossier, à gauche).",
+      "Consultez les logs : docker compose logs -f ia-burn --since 5m",
     ],
   },
   'archive': {
@@ -131,11 +113,32 @@ const FIX_HINTS = {
   },
 };
 
-function buildTree(data) {
+const HARNESS_NAMES = { claude: 'Claude', codex: 'Codex' };
+
+// One node per log root actually read by the backend for this dataset.
+function logNodes(logRoots, dataset) {
+  return ['claude', 'codex'].flatMap(harness => (logRoots?.[dataset]?.[harness] ?? []).map((r, i) => ({
+    id: `${dataset}-${harness}-logs-${i}`, label: r.name || `${HARNESS_NAMES[harness]} logs`,
+    sub: `Fichier · ${r.label}`,
+    type: 'source',
+    status: !r.exists ? 'down' : r.hasLogs ? 'ok' : 'stale',
+    detail: !r.exists ? 'dossier absent' : r.hasLogs ? 'JSONL sessions' : 'aucun fichier .jsonl',
+    hint: [
+      `Chemin hôte : ${r.label}`,
+      `Chemin conteneur : ${r.root}`,
+      `Fichiers lus : ${r.logDirs.map(d => `${d}/**/*.jsonl`).join(', ')}`,
+      ...(!r.exists ? ["Dossier non monté : vérifiez la variable *_DATA_DIR correspondante dans .env puis relancez ./deploy.sh."] : []),
+    ],
+    children: [],
+  })));
+}
+
+function buildTree(data, source) {
   if (!data) return null;
   const { collectors, claude, codex } = data;
+  const dataset = source?.startsWith('enterprise') ? 'enterprise' : 'personal';
   const personal = collectors.personal;
-  const local = collectors.local;
+  const local = collectors[dataset === 'enterprise' ? 'enterprise-local' : 'local'];
 
   const claudeOk = !!claude.burndown;
   const codexOk = !!codex.burndown;
@@ -172,20 +175,7 @@ function buildTree(data) {
     type: 'traitement',
     status: nodeStatus(!local.error && !!local.lastSuccess, true),
     detail: local.error || (local.lastSuccess ? `${ago(local.lastSuccess)} ago` : 'waiting'),
-    children: [
-      {
-        id: 'claude-logs', label: 'Claude logs',
-        sub: 'Fichier · ~/.claude/projects/**/*.jsonl',
-        type: 'source', status: 'ok', detail: 'JSONL sessions',
-        children: [],
-      },
-      {
-        id: 'codex-logs', label: 'Codex logs',
-        sub: 'Fichier · ~/.codex/sessions/**/*.jsonl',
-        type: 'source', status: 'ok', detail: 'JSONL sessions',
-        children: [],
-      },
-    ],
+    children: (source === 'all' ? ['personal', 'enterprise'] : [dataset]).flatMap(d => logNodes(data.logRoots, d)),
   };
 
   const agentBurn = {
@@ -318,7 +308,7 @@ const TYPE_COLORS = {
 function NodeDetail({ node, onClose }) {
   if (!node) return null;
   const color = STATUS_COLORS[node.status] || STATUS_COLORS.ok;
-  const hint = FIX_HINTS[node.id]?.[node.status];
+  const hint = node.hint || FIX_HINTS[node.id]?.[node.status];
   const hintLines = Array.isArray(hint) ? hint : hint ? [hint] : null;
   const isError = node.status === 'down' || node.status === 'stale';
   return (
@@ -351,8 +341,8 @@ function NodeDetail({ node, onClose }) {
   );
 }
 
-function TreeDiagram({ data, selected, onSelect }) {
-  const result = buildTree(data);
+function TreeDiagram({ data, source, selected, onSelect }) {
+  const result = buildTree(data, source);
   if (!result) return null;
 
   const { nodes, edges, zone, width: contentW, height: contentH } = layoutPipeline(result);
@@ -615,7 +605,7 @@ function TreeDiagram({ data, selected, onSelect }) {
   );
 }
 
-export default function SourcesPage() {
+export default function SourcesPage({ source }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(null);
@@ -662,7 +652,7 @@ export default function SourcesPage() {
         </div>
       </div>
       <div className="sources-layout">
-        <TreeDiagram data={data} selected={selectedNode?.id} onSelect={setSelectedNode} />
+        <TreeDiagram data={data} source={source} selected={selectedNode?.id} onSelect={setSelectedNode} />
         {selectedNode && <NodeDetail node={selectedNode} onClose={() => setSelectedNode(null)} />}
       </div>
     </div>

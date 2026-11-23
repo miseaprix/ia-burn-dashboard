@@ -7,6 +7,7 @@ import ActivationPage from './components/ActivationPage.jsx';
 import MonitoringPage from './components/MonitoringPage.jsx';
 import MonitoringSessionPage from './components/MonitoringSessionPage.jsx';
 import SourcesPage from './components/SourcesPage.jsx';
+import ProfileBreakdown from './components/ProfileBreakdown.jsx';
 import { monitoringListUrl } from './lib/monitoring.js';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import useDashboard from './hooks/useDashboard.js';
@@ -44,7 +45,8 @@ export default function App() {
   useEffect(()=>{let active=true;apiFetch('/api/config').then(r=>r.ok ? r.json() : null).then(x=>{if(!active || !x)return;if(x.enterprise?.label)setLabel(x.enterprise.label);setEnterpriseEnabled(isEnterpriseEnabled(x));}).catch(()=>{});return()=>{active=false;};},[]);
   const names={...baseNames,enterprise:label};
   const params = new URLSearchParams(window.location.search);
-  const [source, setSource] = useState(() => ['enterprise','local','enterprise-local'].includes(params.get('source')) ? params.get('source') : (DEMO ? 'enterprise' : 'local')),
+  const [source, setSource] = useState(() => ['enterprise','local','enterprise-local','all'].includes(params.get('source')) ? params.get('source') : (DEMO ? 'enterprise' : 'local')),
+    [profile, setProfile] = useState(() => params.get('profile') || ''),
     [range, setRange] = useState(() => ranges[params.get('range')] ? params.get('range') : (DEMO ? 'mtd' : 'all')),
     [selected, setSelected] = useState(()=>{const page=params.get('page');return page && /^[a-z0-9_-]+$/i.test(page) ? page : 'overview';}),
     [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 650),
@@ -70,13 +72,14 @@ export default function App() {
   const [integrations,setIntegrations]=useState(null);
   useEffect(()=>{let active=true;apiFetch('/api/integrations').then(r=>r.ok ? r.json() : null).then(x=>{if(active)setIntegrations(x);}).catch(()=>{});return()=>{active=false;};},[selected,source]);
   // Garder page, source et période dans l’URL : une actualisation reste sur la page active
-  useEffect(()=>{const q=new URLSearchParams(window.location.search);q.set('page',selected);q.set('source',source);q.set('range',range);if(selected!=='monitor-session') for(const key of ['monitorSource','session','eventsOffset','modelOffset'])q.delete(key);window.history.replaceState(null,'',`${window.location.pathname}?${q}${window.location.hash}`);},[selected,source,range]);
+  useEffect(()=>{const q=new URLSearchParams(window.location.search);q.set('page',selected);q.set('source',source);q.set('range',range);if(profile)q.set('profile',profile);else q.delete('profile');if(selected!=='monitor-session') for(const key of ['monitorSource','session','eventsOffset','modelOffset'])q.delete(key);window.history.replaceState(null,'',`${window.location.pathname}?${q}${window.location.hash}`);},[selected,source,range,profile]);
   const initialDay = new Date().toLocaleDateString('en-CA');
   const [from, setFrom] = useState(initialDay), [to, setTo] = useState(initialDay);
-  const {data, error, loading, refresh: fetchData} = useDashboard({source, range, from, to});
+  const {data, error, loading, refresh: fetchData} = useDashboard({source, range, from, to, profile});
   const changeSource = (value) => {
     setSelected('overview');
     setSource(value);
+    setProfile('');
     if (value !== 'local' && range === 'rtd') setRange('mtd');
   };
   const current = data?.source === source ? data : null,
@@ -88,7 +91,7 @@ export default function App() {
   const detail =
       selected === 'overview' ? null : current?.harnesses?.[selected],
     view = detail || current;
-  const keys = source === 'enterprise-local' ? ['claude', 'codex', 'opencode'] : source === 'local' ? ['codex', 'claude'] : [];
+  const keys = ['enterprise-local', 'all'].includes(source) ? ['claude', 'codex', 'opencode'] : source === 'local' ? ['codex', 'claude'] : [];
   const quota = (h, key) =>
     key === 'codex'
       ? h?.burndown?.weekly?.remainingPercent
@@ -129,7 +132,7 @@ export default function App() {
             </span>
           </button>
           {keys.length > 0 && <p className="sidebar-section">
-            {source === 'enterprise-local' ? `${label} harnesses` : source === 'local' ? 'Subscriptions' : 'Corporate'}
+            {source === 'enterprise-local' ? `${label} harnesses` : source === 'all' ? 'All harnesses' : source === 'local' ? 'Subscriptions' : 'Corporate'}
           </p>}
           {keys.map((k) => {
             const remaining = quota(current?.harnesses?.[k], k);
@@ -205,7 +208,7 @@ export default function App() {
           {selected === 'help' && <HelpPage />}
           {selected === 'admin' && <AdminPage integrations={integrations} enterpriseEnabled={enterpriseEnabled} onHelp={()=>setSelected('help')} />}
           {selected==='monitoring' && <MonitoringPage onAdmin={()=>setSelected('admin')} onHelp={()=>setSelected('help')}/>}
-          {selected==='sources' && <SourcesPage />}
+          {selected==='sources' && <SourcesPage source={source} />}
           {selected==='monitor-session' && <MonitoringSessionPage/>}
           {activation && !loading && <ActivationPage kind={activation} name={names[selected]} waiting={activation==='personal' && (selected==='overview' ? Object.values(integrations.personal.configured).some(Boolean) : integrations.personal.configured[selected])} onAdmin={()=>setSelected('admin')} onHelp={()=>setSelected('help')}/>}
           {!standalonePage && !activation && error && (
@@ -269,6 +272,9 @@ export default function App() {
                   />
                 )}
               </div>
+              {selected === 'overview' && current.profiles?.length > 0 && (
+                <ProfileBreakdown profiles={current.profiles} selected={profile} onSelect={setProfile} />
+              )}
               <ModelsTable
                 key={`${source}-${selected}`}
                 models={view.models}
@@ -325,7 +331,7 @@ export default function App() {
           </span>
           <span>
             IA Burn ·{' '}
-            {source === 'enterprise-local' ? `${label} local usage` : source === 'local' ? 'Personal usage' : 'Corporate budget'}
+            {source === 'enterprise-local' ? `${label} local usage` : source === 'all' ? `Personal + ${label} local usage` : source === 'local' ? 'Personal usage' : 'Corporate budget'}
           </span>
         </div>
       </div>

@@ -54,6 +54,7 @@ export default function Header({
             Perso
           </button>
           {enterpriseEnabled && <button className={source === 'enterprise-local' ? 'active' : ''} onClick={() => onSourceChange('enterprise-local')}>{label} local</button>}
+          {enterpriseEnabled && <button className={source === 'all' ? 'active' : ''} onClick={() => onSourceChange('all')}>Perso + {label} local</button>}
           {enterpriseEnabled && <button
             className={source === 'enterprise' ? 'active' : ''}
             onClick={() => onSourceChange('enterprise')}

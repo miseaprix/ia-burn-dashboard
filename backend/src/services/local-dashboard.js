@@ -3,8 +3,19 @@ import { historyDataset } from '../config/datasets.js';
 import { harnessColor, providerOf, rangeToDates, rangeLabel } from '../domain/providers.js';
 import { buildUnified, money, contract } from '../domain/shape.js';
 import { usageEconomics, usageDetails } from '../domain/usage-economics.js';
+import { localProfiles } from '../integrations/local.js';
+// 'all' merges both local datasets at read time; it has no history key of its own.
+const datasetsOf = source => source === 'all' ? ['local', 'enterprise-local'] : [source];
 export function getYearlyHistory(source = 'local') {
-  return { source, basis: 'observed local logs', years: stateStore().yearly(historyDataset(source)) };
+  // Same year and harness in both datasets: numeric fields add up (models: upper bound).
+  const years = new Map();
+  for (const row of datasetsOf(source).flatMap(s => stateStore().yearly(historyDataset(s)))) {
+    const key = row.year + '|' + row.harness, prev = years.get(key);
+    years.set(key, !prev ? row : Object.fromEntries(Object.entries(row).map(([k, v]) =>
+      [k, v == null ? prev[k] : typeof v === 'number' ? v + (prev[k] ?? 0) : k === 'costComplete' ? v && prev[k]
+        : k === 'firstDay' ? [v, prev[k]].sort()[0] : k === 'lastDay' ? [v, prev[k]].sort()[1] : v])));
+  }
+  return { source, basis: 'observed local logs', years: [...years.values()] };
 }
 const inRange = (date, start, end) => !start || (date >= start && date <= end);
 // ------------------------------------------------------------------ summary
@@ -67,13 +78,18 @@ function summarize(rows) {
   };
 }
 
-export async function getDashboard({ range, from: customFrom, to: customTo, source = 'local' }) {
+export async function getDashboard({ range, from: customFrom, to: customTo, source = 'local', profile }) {
   try {
     let { start, end } = rangeToDates(range);
     const filtered = range !== 'all';
     if (range === 'custom') { start = customFrom; end = customTo; }
 
-    const allRows = stateStore().dailyRows(historyDataset(source));
+    const profiles = datasetsOf(source).flatMap(s => localProfiles(s).map(p => ({ ...p, source: s })));
+    const selected = profile ? profiles.find(p => p.id === profile) : null;
+    if (profile && !selected) return { error: { message: 'Unknown source profile.' } };
+    // A profile filter reads the live rows of that profile; otherwise the recorded history.
+    const allRows = selected ? selected.rows
+      : datasetsOf(source).flatMap(s => stateStore().dailyRows(historyDataset(s)));
     const personal = structuredClone((source === 'local' ? stateStore().collection('personal')?.value : null) || {
       claude: { burndown: null }, codex: { burndown: null },
     });
@@ -166,14 +182,13 @@ export async function getDashboard({ range, from: customFrom, to: customTo, sour
       'Spend is incomplete: models without pricing are excluded from spend charts and totals. Token counts include all usage.'
     ];
     for (const day of result.daily) {
-      day.byGroup = Object.fromEntries(
-        rows
-          .filter((r) => r.period === day.date)
-          .map((r) => [r.agent, money(r.cost)]),
-      );
+      // 'all' can hold the same harness twice per day (one row per dataset): add them up.
+      day.byGroup = rows
+        .filter((r) => r.period === day.date)
+        .reduce((acc, r) => ({ ...acc, [r.agent]: money((acc[r.agent] ?? 0) + r.cost) }), {});
     }
     result.harnesses = {};
-    for (const key of (source === 'enterprise-local' ? ['claude', 'codex', 'opencode'] : ['claude', 'codex'])) {
+    for (const key of (source === 'local' ? ['claude', 'codex'] : ['claude', 'codex', 'opencode'])) {
       const summary = summarize(rows.filter((r) => r.agent === key));
       result.harnesses[key] = {
         ...personal[key],
@@ -227,9 +242,20 @@ export async function getDashboard({ range, from: customFrom, to: customTo, sour
         valueMultiple: economics.valueMultiple,
       };
     }
-    if (source === 'enterprise-local') {
+    // Per-profile split of the selected range (live, from the last collection).
+    result.profiles = profiles.map(p => {
+      const sum = summarize(p.rows.filter(r => r.tokens > 0 && (!filtered || inRange(r.period, start, end))));
+      return { id: p.id, source: p.source, harness: p.harness, path: p.path, name: p.name,
+        spend: money(sum.totalCost), tokens: sum.totalTokens, ...costCoverage(sum) };
+    });
+    result.profile = selected ? selected.id : null;
+    if (selected) result.warnings = [...(result.warnings || []),
+      `Filtered on ${selected.name || selected.path}: current log files only, without history from removed logs.`];
+    if (source !== 'local') {
       result.subscriptions = [];
-      result.footnote = 'Observed enterprise usage on this workstation. Costs are API-equivalent estimates, not the corporate invoice or total key usage.';
+      result.footnote = source === 'all'
+        ? 'Personal and enterprise usage observed on this workstation. Costs are API-equivalent estimates; quotas are shown on the personal source only.'
+        : 'Observed enterprise usage on this workstation. Costs are API-equivalent estimates, not the corporate invoice or total key usage.';
       for (const h of Object.values(result.harnesses)) { delete h.subscription; delete h.economics; }
     }
     result.yearlyHistory = getYearlyHistory(source);

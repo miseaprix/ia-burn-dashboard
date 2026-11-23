@@ -16,7 +16,8 @@ Builds the local image, detects available personal caches and starts the dashboa
 Run the same command again to rebuild and redeploy. History volumes are preserved.
 
   --port PORT   Override BURN_PORT for this deployment (default: .env or 4090).
-  --profiles FILE  Use the host collector configuration for read-only log mounts.
+  --profiles FILE  Use the host collector configuration for read-only log mounts
+                (default: ~/.local/state/ia-burn/collector.json when it exists).
   --check       Validate the Compose configuration without restarting the container.
   --no-build    Reuse the existing local image.
   -h, --help    Show this help.
@@ -117,12 +118,25 @@ for enterprise_kind in CLAUDE CODEX OPENCODE; do
     export "$enterprise_var=$enterprise_path"
 done
 
+# Without --profiles, the default collector configuration is used when present;
+# a broken default only prints a warning so the base deployment still works.
+profiles_auto=false
+default_profiles="${IA_BURN_PROFILES:-$HOME/.local/state/ia-burn/collector.json}"
+if [[ -z "$profiles_file" && -f "$default_profiles" ]] && command -v node >/dev/null 2>&1; then
+    profiles_file="$default_profiles"; profiles_auto=true
+fi
 if [[ -n "$profiles_file" ]]; then
     command -v node >/dev/null 2>&1 || fail '--profiles requires Node.js on the host'
     mkdir -p .runtime
     profiles_override="$(mktemp "$PROJECT_DIR/.runtime/profiles.XXXXXX")"
     trap 'rm -f -- "$profiles_override"' EXIT
-    node "$PROJECT_DIR/scripts/profile-mounts.mjs" "$profiles_file" > "$profiles_override"
+    if ! node "$PROJECT_DIR/scripts/profile-mounts.mjs" "$profiles_file" > "$profiles_override"; then
+        [[ "$profiles_auto" == true ]] || fail 'Invalid profile configuration'
+        printf 'Warning: ignoring %s (invalid profile configuration).\n' "$profiles_file" >&2
+        rm -f -- "$profiles_override"; profiles_file=""
+    fi
+fi
+if [[ -n "$profiles_file" ]]; then
     profiles_arg_index=$(( ${#compose_args[@]} + 1 ))
     compose_args+=(-f "$profiles_override")
     printf 'Using shared profile configuration %s\n' "$profiles_file"

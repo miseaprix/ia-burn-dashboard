@@ -9,7 +9,7 @@ export function useEnterpriseLabel() {
 
 // Data sources offered in the UI. Enterprise sources are hidden when
 // GET /api/config reports enterprise.enabled === false (no gateway URL).
-export const ALL_SOURCES = ['local', 'enterprise-local', 'enterprise'];
+export const ALL_SOURCES = ['local', 'enterprise-local', 'all', 'enterprise'];
 export function isEnterpriseEnabled(config) {
   return config?.enterprise?.enabled !== false;
 }
